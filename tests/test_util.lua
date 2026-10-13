@@ -1,0 +1,17 @@
+local util = require('tabletpanel.util')
+
+return function(T)
+  T.test('deepEqual compares scalars', function()
+    T.ok(util.deepEqual(1, 1)); T.ok(util.deepEqual('a', 'a'))
+    T.ok(not util.deepEqual(1, '1')); T.ok(not util.deepEqual(nil, false))
+  end)
+  T.test('deepEqual compares nested tables both ways', function()
+    T.ok(util.deepEqual({ a = { 1, 2 }, b = true }, { b = true, a = { 1, 2 } }))
+    T.ok(not util.deepEqual({ a = 1 }, { a = 1, b = 2 }))
+    T.ok(not util.deepEqual({ a = 1, b = 2 }, { a = 1 }))
+    T.ok(not util.deepEqual({ 1, 2 }, { 2, 1 }))
+  end)
+  T.test('deepEqual ignores metatables', function()
+    T.ok(util.deepEqual(setmetatable({}, { x = 1 }), {}))
+  end)
+end
