@@ -112,6 +112,23 @@ function accentCss(a) {
   return `hsl(${Math.round(a.h)} ${Math.round(a.s * 100)}% ${Math.round(a.l * 100)}%)`;
 }
 
+const SLEEP_AFTER_DISCONNECT_MS = 30000; // a fully sleeping Mac can't say so; silence means it's gone
+const PEEK_MS = 60000;
+
+// Whether the tablet screen should be dark. macAwake is undefined until the Mac reports it.
+function shouldSleep({ macAwake, connected, disconnectedSince, peekUntil, now }) {
+  if (now < peekUntil) return false;
+  if (connected) return macAwake === false;
+  return disconnectedSince != null && now - disconnectedSince >= SLEEP_AFTER_DISCONNECT_MS;
+}
+
+// What a hardware key does. Volume keys never wake the screen: the cover can hold them down.
+function keyAction(key, { layerOpen, asleep }) {
+  if (asleep) return key === 'back' || key === 'home' || key === 'recents' ? 'peek' : null;
+  if (key === 'back' && layerOpen) return 'closeLayer';
+  return null;
+}
+
 /* ---------- Mock mode (?mock, ?mock=idle, ?mock=nospotify) ---------- */
 
 function mockArt(h1, h2) {
@@ -150,6 +167,7 @@ function mockState(variant) {
       ],
     },
     spotify,
+    display: { awake: true },
   };
 }
 
@@ -205,6 +223,13 @@ class MockSocket {
     setTimeout(() => { if (this.onmessage) this.onmessage({ data: JSON.stringify(reply) }); }, 30);
   }
 
+  // Dev aid: ?mock pages toggle the Mac's awake state with the "d" key.
+  toggleDisplay() {
+    this.state.display.awake = !this.state.display.awake;
+    this.v += 1;
+    if (this.onmessage) this.onmessage({ data: JSON.stringify(this.stateMsg('display')) });
+  }
+
   close() {
     this.readyState = 3;
     if (this.onclose) this.onclose();
@@ -245,7 +270,7 @@ function boot() {
   const overlay = $('overlay');
   const dot = $('dot');
 
-  const store = { windows: null, spotify: null, spotifyAt: 0 };
+  const store = { windows: null, spotify: null, display: null, spotifyAt: 0 };
   const conn = { ws: null, attempt: 0, nextId: 1, pending: new Map(), lastRx: 0, versions: {} };
   let overlayTimer = null;
 
@@ -287,6 +312,9 @@ function boot() {
     clearTimeout(overlayTimer);
     if (on) overlay.hidden = true;
     else overlayTimer = setTimeout(() => { overlay.hidden = false; }, 2000);
+    sleep.connected = on;
+    sleep.disconnectedSince = on ? null : (sleep.disconnectedSince ?? Date.now());
+    updateSleep();
   }
 
   function send(cmd, args) {
@@ -573,6 +601,45 @@ function boot() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLayer(); });
   window.addEventListener('resize', () => { if (openApp) fitSheet(); });
 
+  /* ----- sleep: dark while the Mac isn't in use ----- */
+
+  const sleepEl = $('sleep');
+  const sleep = { connected: false, disconnectedSince: Date.now(), peekUntil: 0, asleep: false };
+
+  function updateSleep() {
+    const asleep = shouldSleep({
+      macAwake: store.display ? store.display.awake : undefined,
+      connected: sleep.connected,
+      disconnectedSince: sleep.disconnectedSince,
+      peekUntil: sleep.peekUntil,
+      now: Date.now(),
+    });
+    if (asleep === sleep.asleep) return;
+    sleep.asleep = asleep;
+    document.body.classList.toggle('asleep', asleep);
+    if (window.TabletApp) {
+      try { window.TabletApp.setScreen(!asleep); } catch (_) { /* older app build */ }
+    }
+  }
+
+  function peek() {
+    sleep.peekUntil = Date.now() + PEEK_MS;
+    updateSleep();
+  }
+
+  renderers.display = updateSleep;
+  sleepEl.addEventListener('pointerdown', (e) => { e.preventDefault(); peek(); });
+  setInterval(updateSleep, 1000);
+
+  /* ----- hardware keys (from the tablet app) ----- */
+
+  window.addEventListener('tablet-key', (e) => {
+    const action = keyAction(e.detail && e.detail.key, { layerOpen: !!openApp, asleep: sleep.asleep });
+    if (action === 'closeLayer') closeLayer();
+    else if (action === 'peek') peek();
+  });
+  if (MOCK) document.addEventListener('keydown', (e) => { if (e.key === 'd' && conn.ws) conn.ws.toggleDisplay(); });
+
 
   /* ----- spotify ----- */
 
@@ -777,7 +844,7 @@ function boot() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector,
-    rgbToHsl, pickAccent, accentCss, mockState,
+    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction,
   };
 }
 if (typeof document !== 'undefined') boot();

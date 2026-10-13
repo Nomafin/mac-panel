@@ -508,6 +508,18 @@ body.layer-open .stage { opacity: 0.12; }
   background: #c44;
 }
 .dot.on { background: #3a7; opacity: 0.45; }
+.sleep {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1s var(--ease-out);
+}
+body.asleep .sleep { opacity: 1; pointer-events: auto; }
+/* Nothing to animate behind a black screen; spare the tablet's GPU. */
+body.asleep *, body.asleep *::before, body.asleep *::after { animation-play-state: paused !important; }
 
 /* ---------- Portrait: music becomes a strip across the top ---------- */
 @media (orientation: portrait) {

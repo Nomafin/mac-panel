@@ -111,4 +111,32 @@ test('mockState variants', () => {
   assert.equal(h.mockState('idle').spotify.state, 'stopped');
   assert.equal(h.mockState('').spotify.state, 'playing');
   assert.ok(h.mockState('').windows.apps.length >= 3);
+  assert.equal(h.mockState('').display.awake, true);
+});
+
+test('shouldSleep follows the Mac while connected', () => {
+  const base = { connected: true, disconnectedSince: null, peekUntil: 0, now: 1000 };
+  assert.equal(h.shouldSleep({ ...base, macAwake: true }), false);
+  assert.equal(h.shouldSleep({ ...base, macAwake: false }), true);
+  assert.equal(h.shouldSleep({ ...base, macAwake: undefined }), false);
+});
+
+test('shouldSleep goes dark after 30 s without a connection', () => {
+  const base = { macAwake: true, connected: false, disconnectedSince: 0, peekUntil: 0 };
+  assert.equal(h.shouldSleep({ ...base, now: 29999 }), false);
+  assert.equal(h.shouldSleep({ ...base, now: 30000 }), true);
+});
+
+test('shouldSleep stays awake during a peek', () => {
+  assert.equal(h.shouldSleep({ macAwake: false, connected: true, disconnectedSince: null, peekUntil: 5000, now: 4999 }), false);
+  assert.equal(h.shouldSleep({ macAwake: false, connected: true, disconnectedSince: null, peekUntil: 5000, now: 5000 }), true);
+});
+
+test('keyAction: back closes the sheet, navigation keys peek while dark, volume keys do nothing', () => {
+  assert.equal(h.keyAction('back', { layerOpen: true, asleep: false }), 'closeLayer');
+  assert.equal(h.keyAction('back', { layerOpen: false, asleep: false }), null);
+  assert.equal(h.keyAction('home', { layerOpen: false, asleep: true }), 'peek');
+  assert.equal(h.keyAction('recents', { layerOpen: true, asleep: true }), 'peek');
+  assert.equal(h.keyAction('volumedown', { layerOpen: true, asleep: true }), null);
+  assert.equal(h.keyAction(undefined, { layerOpen: true, asleep: false }), null);
 });
