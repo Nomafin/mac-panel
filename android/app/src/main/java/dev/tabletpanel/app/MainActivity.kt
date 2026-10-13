@@ -56,6 +56,17 @@ class MainActivity : Activity() {
 
     private var loadFailed = false
     private val retry = Runnable { load() }
+    private var waitingSince = 0L
+    private var waitingPeekUntil = 0L
+    private val waitingTick = object : Runnable {
+        override fun run() {
+            applyWaitingDark()
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private var resumed = false
+    private var pausedAt = 0L
 
     private var holdX = 0f
     private var holdY = 0f
@@ -64,6 +75,7 @@ class MainActivity : Activity() {
     private val recentsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (!Keys.isRecentsReason(intent.getStringExtra("reason"))) return
+            if (!Keys.shouldBounce(resumed, pausedAt, SystemClock.uptimeMillis())) return
             (getSystemService(ACTIVITY_SERVICE) as ActivityManager).moveTaskToFront(taskId, 0)
             sendKey("recents")
         }
@@ -88,6 +100,10 @@ class MainActivity : Activity() {
             textSize = 22f
             gravity = Gravity.CENTER
             visibility = View.GONE
+            setOnClickListener {
+                waitingPeekUntil = SystemClock.uptimeMillis() + Waiting.PEEK_MS
+                applyWaitingDark()
+            }
         }
         setContentView(FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -124,9 +140,33 @@ class MainActivity : Activity() {
         loadFailed = true
         web.visibility = View.INVISIBLE
         waiting.text = "Waiting for your Mac…\n\n$url"
-        waiting.visibility = View.VISIBLE
+        if (waiting.visibility != View.VISIBLE) {
+            waiting.visibility = View.VISIBLE
+            waitingSince = SystemClock.uptimeMillis()
+            waitingPeekUntil = 0L
+            handler.post(waitingTick)
+        }
         handler.removeCallbacks(retry)
         handler.postDelayed(retry, RETRY_MS)
+    }
+
+    private fun hideWaiting() {
+        handler.removeCallbacks(waitingTick)
+        waiting.visibility = View.GONE
+        waiting.alpha = 1f
+        setBrightness(on = true) // the page takes over from here
+    }
+
+    private fun applyWaitingDark() {
+        val dark = Waiting.isDark(waitingSince, waitingPeekUntil, SystemClock.uptimeMillis())
+        waiting.alpha = if (dark) 0f else 1f
+        setBrightness(on = !dark)
+    }
+
+    private fun setBrightness(on: Boolean) {
+        window.attributes = window.attributes.apply {
+            screenBrightness = if (on) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else 0f
+        }
     }
 
     private inner class Client : WebViewClient() {
@@ -140,7 +180,7 @@ class MainActivity : Activity() {
 
         override fun onPageFinished(view: WebView, url: String) {
             if (loadFailed) return
-            waiting.visibility = View.GONE
+            hideWaiting()
             web.visibility = View.VISIBLE
         }
     }
@@ -152,11 +192,7 @@ class MainActivity : Activity() {
     private inner class Bridge {
         /** Dark = minimum brightness; the page draws black on top, so the AMOLED pixels are off. */
         @JavascriptInterface
-        fun setScreen(on: Boolean) = runOnUiThread {
-            window.attributes = window.attributes.apply {
-                screenBrightness = if (on) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else 0f
-            }
-        }
+        fun setScreen(on: Boolean) = runOnUiThread { setBrightness(on) }
     }
 
     /* ----- hardware keys ----- */
@@ -179,7 +215,14 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         hideSystemBars()
+    }
+
+    override fun onPause() {
+        resumed = false
+        pausedAt = SystemClock.uptimeMillis()
+        super.onPause()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

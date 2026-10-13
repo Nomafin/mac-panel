@@ -92,8 +92,9 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 4. `./gradlew installDebug` (see Build).
 5. **Make it the home app**: press Home, choose *Mac Panel*, then *Always*.
 6. If the Mac's address isn't `http://192.168.1.62:8765/`, set it in the escape menu → *Mac address…* (`192.168.1.70` is enough; `http://` and `:8765` are added).
-7. In *Settings → Battery*, exclude Mac Panel from battery optimisation, and keep the tablet on its charger.
-8. Fully Kiosk Browser is no longer needed; uninstall it if it's installed.
+7. **Turn off the screen lock**: *Settings → Lock screen and security → Screen lock type → None*. Otherwise the tablet waits for a swipe or PIN after every restart instead of going straight to the panel.
+8. In *Settings → Battery*, exclude Mac Panel from battery optimisation, and keep the tablet on its charger.
+9. Fully Kiosk Browser is no longer needed; uninstall it if it's installed.
 
 Updating the page needs no reinstall: the app loads it from the Mac. Only changes under `android/` need `./gradlew installDebug`.
 
@@ -108,6 +109,8 @@ Updating the page needs no reinstall: the app loads it from the Mac. Only change
 - [ ] Mac display sleep (`pmset displaysleepnow`) or lock (Ctrl-Cmd-Q) turns the tablet black within about a second; waking/unlocking brings it back.
 - [ ] Mac fully asleep: the tablet goes black after ~30 s and comes back when the Mac wakes.
 - [ ] Tapping the black screen shows the panel for a minute.
+- [ ] Restart the tablet while the Mac is asleep: *Waiting for your Mac…* appears, goes black after 30 s, and the panel comes up once the Mac wakes.
+- [ ] After *Choose home app* → Samsung launcher, Recents works normally in other apps.
 
 **AMOLED burn-in**: besides going black with the Mac, the page uses a pure black background and nudges itself 1–2 px every 3 minutes. Keep brightness moderate.
 

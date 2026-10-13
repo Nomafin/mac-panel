@@ -14,5 +14,13 @@ object Keys {
     /** Android 7 announces the Recents key to apps as "close system dialogs" with this reason. */
     fun isRecentsReason(reason: String?) = reason == "recentapps"
 
+    /**
+     * Recents pulls the panel back only if it was in front. The broadcast can arrive just after
+     * onPause, hence the grace period; otherwise another app (e.g. the Samsung launcher) is in use.
+     */
+    fun shouldBounce(resumed: Boolean, pausedAt: Long, now: Long) = resumed || now - pausedAt < BOUNCE_GRACE_MS
+
+    private const val BOUNCE_GRACE_MS = 1000L
+
     fun eventScript(key: String) = "window.dispatchEvent(new CustomEvent('tablet-key',{detail:{key:'$key'}}))"
 }

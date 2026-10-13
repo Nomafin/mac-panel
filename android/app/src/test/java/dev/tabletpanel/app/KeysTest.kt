@@ -24,4 +24,12 @@ class KeysTest {
         "window.dispatchEvent(new CustomEvent('tablet-key',{detail:{key:'back'}}))",
         Keys.eventScript("back"),
     )
+
+    @Test fun bouncesRecentsOnlyWhenThePanelWasInFront() {
+        assertTrue(Keys.shouldBounce(resumed = true, pausedAt = 0, now = 50_000))
+        // the broadcast can arrive just after onPause
+        assertTrue(Keys.shouldBounce(resumed = false, pausedAt = 49_500, now = 50_000))
+        // another app (e.g. the Samsung launcher) is in front: leave Recents alone
+        assertFalse(Keys.shouldBounce(resumed = false, pausedAt = 40_000, now = 50_000))
+    }
 }
