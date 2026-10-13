@@ -365,39 +365,50 @@ function boot() {
     return grid.querySelector(`.tile[data-app="${CSS.escape(bundleId)}"]`);
   }
 
-  function tileHtml(app, focusedId) {
+  const SPACE_MARK = '<svg class="space-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="12" height="12" rx="2.5"/><path d="M9 4h9.5A2.5 2.5 0 0 1 21 6.5V15"/></svg>';
+
+  // Tiles depend only on the window data; focus, entrances and the open sheet are classes
+  // applied afterwards, so a focus change never rebuilds the grid (and never cuts an animation).
+  function tileHtml(app) {
     const single = app.windows.length === 1;
     const win = app.windows[0];
     const cls = ['tile'];
-    if (app.windows.some((x) => x.id === focusedId)) cls.push('focused');
     if (app.hidden) cls.push('app-hidden');
     if (single && win.minimized) cls.push('minimized');
     if (!single) cls.push('stack');
-    if (knownApps && !knownApps.has(app.bundleId)) cls.push('enter');
-    if (app.bundleId === openApp) cls.push('source'); // it has become the sheet
-    const flag = single ? windowFlag(app, win) : '';
-    const label = single ? app.name + ': ' + win.title : `${app.name}, ${app.windows.length} windows`;
-    return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${single ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}">
+    const label = single ? `${app.name}: ${win.title}${windowFlag(app, win) ? ' (' + windowFlag(app, win) + ')' : ''}`
+      : `${app.name}, ${app.windows.length} windows`;
+    return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${single ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}" title="${esc(label)}">
         <img class="icon" src="${esc(iconUrl(app.bundleId))}" alt="">
-        ${single
-          ? `<span class="t">${esc(win.title)}</span>`
-          : `<span class="t">${esc(app.name)}</span><span class="count">${app.windows.length} windows</span>`}
-        ${flag ? `<span class="flag">${flag}</span>` : ''}
+        ${single ? (win.otherSpace ? SPACE_MARK : '') : `<span class="n">${app.windows.length}</span>`}
       </button>`;
   }
+
+  let gridHtml = '';
 
   function renderWindows() {
     const w = store.windows;
     if (!w || !w.apps || !w.apps.length) {
+      gridHtml = '';
       grid.innerHTML = '<p class="empty">No open windows on your Mac.</p>';
       placeLamp();
       if (openApp) closeLayer();
       return;
     }
-    const scroll = scroller.scrollTop;
-    grid.innerHTML = w.apps.map((app) => tileHtml(app, w.focusedId)).join('');
-    knownApps = new Set(w.apps.map((a) => a.bundleId));
-    scroller.scrollTop = scroll;
+    const html = w.apps.map(tileHtml).join('');
+    if (html !== gridHtml) {
+      gridHtml = html;
+      grid.innerHTML = html;
+      if (knownApps) {
+        w.apps.forEach((a) => { if (!knownApps.has(a.bundleId)) tileFor(a.bundleId).classList.add('enter'); });
+      }
+      knownApps = new Set(w.apps.map((a) => a.bundleId));
+    }
+    grid.querySelectorAll('.tile').forEach((tile) => {
+      const app = findApp(tile.dataset.app);
+      tile.classList.toggle('focused', app.windows.some((x) => x.id === w.focusedId));
+      tile.classList.toggle('source', app.bundleId === openApp); // it has become the sheet
+    });
     placeLamp();
     if (openApp) {
       if (findApp(openApp)) renderCards(false);
@@ -428,6 +439,14 @@ function boot() {
     el.classList.add('shake');
   }
 
+  // Like the Dock: the icon you picked does a little hop.
+  function hop(tile) {
+    if (!tile) return;
+    tile.classList.remove('hop');
+    void tile.offsetWidth;
+    tile.classList.add('hop');
+  }
+
   function focusWindow(id, origin) {
     const previous = store.windows.focusedId;
     store.windows.focusedId = id; // optimistic
@@ -446,6 +465,7 @@ function boot() {
     const tile = e.target.closest('.tile');
     if (!tile || !store.windows) return;
     if (tile.dataset.id) {
+      hop(tile);
       focusWindow(Number(tile.dataset.id), () => tileFor(tile.dataset.app));
     } else {
       openLayer(tile.dataset.app);
@@ -546,6 +566,7 @@ function boot() {
     const app = openApp;
     focusWindow(id, () => tileFor(app));
     closeLayer();
+    setTimeout(() => hop(tileFor(app)), 560); // lands as the sheet folds back in
   });
   $('layer-backdrop').addEventListener('click', closeLayer);
   $('sheet-close').addEventListener('click', closeLayer);
