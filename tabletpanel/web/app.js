@@ -58,6 +58,18 @@ function makeThrottle(fn, ms, clock) {
   };
 }
 
+// Hammerspoon pushes only to the newest WebSocket client. A push client is always up to
+// date, so ping replies that keep carrying missed updates mean another client took over.
+function makeDemotionDetector(threshold) {
+  let streak = 0;
+  return function (missedCount) {
+    streak = missedCount > 0 ? streak + 1 : 0;
+    if (streak < threshold) return false;
+    streak = 0;
+    return true;
+  };
+}
+
 /* ---------- Mock mode (?mock, ?mock=idle, ?mock=nospotify) ---------- */
 
 function mockState(variant) {
@@ -158,6 +170,7 @@ const ICONS = {
 };
 
 const PING_MS = 2000;
+const CONNECT_TIMEOUT_MS = 3000; // an unanswered connect (Mac asleep) can otherwise hang ~2 min
 const STALE_MS = 7000; // no message for this long => socket is dead (e.g. after tablet sleep)
 const SHIFT_MS = 180000; // AMOLED burn-in: nudge the whole UI every 3 minutes
 const SHIFTS = [[0, 0], [1, 1], [2, 0], [1, -1], [0, -2], [-1, -1], [-2, 0], [-1, 1]];
@@ -181,7 +194,9 @@ function boot() {
   function connect() {
     const ws = MOCK ? new MockSocket(params.get('mock')) : new WebSocket('ws://' + location.host + '/ws');
     conn.ws = ws;
+    const connectTimer = setTimeout(() => { if (ws.readyState === 0) reconnect(ws); }, CONNECT_TIMEOUT_MS);
     ws.onopen = () => {
+      clearTimeout(connectTimer);
       conn.attempt = 0;
       conn.versions = {}; // the Mac may have restarted and reset its version counters
       conn.lastRx = Date.now();
@@ -251,11 +266,15 @@ function boot() {
     if (render) render();
   }
 
+  const missedPushes = makeDemotionDetector(2);
   setInterval(() => {
     const ws = conn.ws;
     if (!ws || ws.readyState !== 1) return;
     if (Date.now() - conn.lastRx > STALE_MS) { reconnect(ws); return; }
-    send('ping');
+    send('ping').then((r) => {
+      // Reconnecting makes this tablet the newest client, so it gets pushes again.
+      if (r.ok && missedPushes((r.updates || []).length) && conn.ws === ws) reconnect(ws);
+    });
   }, PING_MS);
 
   document.addEventListener('visibilitychange', () => {
@@ -445,6 +464,6 @@ function boot() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, mockState };
+  module.exports = { esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector, mockState };
 }
 if (typeof document !== 'undefined') boot();

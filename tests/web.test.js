@@ -66,6 +66,15 @@ test('makeThrottle runs immediately, then coalesces into one trailing call with 
   assert.deepEqual(calls[2], [300, 4]);
 });
 
+test('demotion detector fires after consecutive ping replies that carried missed updates', () => {
+  const missed = h.makeDemotionDetector(2);
+  assert.equal(missed(1), false);
+  assert.equal(missed(0), false); // a clean reply resets the count
+  assert.equal(missed(1), false);
+  assert.equal(missed(2), true);
+  assert.equal(missed(1), false); // resets after firing
+});
+
 test('mockState variants', () => {
   assert.equal(h.mockState('nospotify').spotify.running, false);
   assert.equal(h.mockState('idle').spotify.state, 'stopped');
