@@ -10,6 +10,7 @@ A Hammerspoon module that turns a spare Android tablet into an instant window sw
 - The tablet sends a `ping` every 2 s; replies carry anything it missed. Hammerspoon pushes only to the **most recently connected** client, so if you also open the page on another device, the older one stays in sync via ping (≤ 2 s lag) instead of instantly.
 - The server only runs when the Mac's default gateway has your home router's MAC address (no Location permission needed; works on Wi-Fi and Ethernet).
 - No authentication: anyone on your home network can use the panel.
+- The Mac also reports whether it's in use (display awake and unlocked), so the tablet can go dark with it.
 - Spotify is never launched by the panel: every AppleScript checks that Spotify is running first, and reads pause briefly while Spotify is quitting.
 
 ## Mac setup
@@ -46,26 +47,69 @@ curl -s http://localhost:8765/api/state | jq                                  # 
 (printf '%s\n' '{"id":1,"cmd":"hello"}'; sleep 30) | websocat -E ws://localhost:8765/ws   # watch pushes live
 (printf '%s\n' '{"id":1,"cmd":"spotify.playpause"}'; sleep 1) | websocat -E ws://localhost:8765/ws
 open "http://localhost:8765/"                                                  # real UI in a desktop browser
-open "http://localhost:8765/?mock"                                             # fake data (also ?mock=idle, ?mock=nospotify)
+open "http://localhost:8765/?mock"                                             # fake data (also ?mock=idle, ?mock=nospotify) — press d to toggle the Mac's awake state
 ```
 
 `websocat` (`brew install websocat`) needs `-E` to exit, because Hammerspoon doesn't complete the WebSocket close handshake.
 
 Unit tests: `/opt/homebrew/opt/lua@5.4/bin/lua tests/run.lua` (`brew install lua@5.4` — Hammerspoon embeds Lua 5.4) and `node --test tests/web.test.js`.
 
-## Tablet setup (Galaxy Tab S2, Android 7)
+## Tablet app (Galaxy Tab S2, Android 7)
 
-1. **Update the browser engine**: Play Store → *Android System WebView* (and *Chrome*) → Update. On Android 7 they top out around version 119, which this page targets. After the tablet connects, the Hammerspoon console logs its user agent (`client hello: … Chrome/119…`) so you can confirm.
-2. **Install Fully Kiosk Browser** from the Play Store.
-3. In Fully's settings:
-   - *Web Content Settings → Start URL*: `http://<mac-ip>:8765/`
-   - *Web Auto Reload → Auto Reload on Network Reconnect*: on (belt and braces; the page also reconnects by itself)
-   - *Device Management → Keep Screen On*: on; *Launch on Boot*: on
-   - *Appearance*: hide status bar and navigation bar for full screen
-   - *Device Management → Screen Orientation*: landscape
-   - Optional (Fully PLUS licence): scheduled screen off at night, and *Motion Detection* to wake on approach.
-4. **AMOLED burn-in**: the page uses a pure black background and nudges itself 1–2 px every 3 minutes, but a scheduled screen-off overnight is still the best protection. Keep brightness moderate.
-5. Keep the tablet on its charger; in Android *Settings → Battery*, exclude Fully Kiosk from battery optimisation.
+`android/` is a small app, *Mac Panel*, that shows the panel full screen and acts as the tablet's home screen:
+
+- It starts at boot, and Home, Back and Recents all keep you on the panel. Back closes the window sheet. The volume keys are caught and do nothing for now.
+- Each key reaches the page as a `tablet-key` event (`back`, `home`, `recents`, `volumeup`, `volumedown`), so giving a key a job is a page change in `web/app.js` (`keyAction`).
+- The screen goes black when the Mac's display sleeps, the Mac locks or its screensaver starts. It also goes black after 30 s without a connection, e.g. when the Mac is fully asleep. It comes back when the Mac wakes. Tapping the black screen shows the panel for 60 s.
+- **Escape menu**: hold the top-left corner for 3 seconds. It has *Reload*, *Mac address…*, *Android settings* and *Choose home app* (to go back to the Samsung launcher).
+- If the Mac can't be reached when the app starts, it shows *Waiting for your Mac…* and retries every 5 s.
+
+### Build
+
+One-off, on the Mac:
+
+```bash
+brew install --cask android-commandlinetools android-platform-tools
+yes | sdkmanager --licenses                       # read/accept the Android SDK licences
+sdkmanager "platforms;android-34" "build-tools;34.0.0"
+echo "sdk.dir=/opt/homebrew/share/android-commandlinetools" > android/local.properties
+```
+
+The build needs Java 17 (the Android build tools don't run on the newest Java), so every Gradle command below starts by pointing `JAVA_HOME` at it:
+
+```bash
+cd android
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+./gradlew test             # unit tests, no tablet needed
+./gradlew installDebug     # build and install on the connected tablet
+```
+
+### Tablet setup
+
+1. **Update the browser engine**: Play Store → *Android System WebView* → Update (the app uses it; the page targets Chrome 119).
+2. **Turn on USB debugging**: *Settings → About device → Software info*, tap *Build number* 7 times. Then *Settings → Developer options → USB debugging* on.
+3. **Connect the USB cable** and accept *Allow USB debugging?* on the tablet (tick *Always allow from this computer*). `adb devices` should list it as `device`.
+4. `./gradlew installDebug` (see Build).
+5. **Make it the home app**: press Home, choose *Mac Panel*, then *Always*.
+6. If the Mac's address isn't `http://192.168.1.62:8765/`, set it in the escape menu → *Mac address…* (`192.168.1.70` is enough; `http://` and `:8765` are added).
+7. In *Settings → Battery*, exclude Mac Panel from battery optimisation, and keep the tablet on its charger.
+8. Fully Kiosk Browser is no longer needed; uninstall it if it's installed.
+
+Updating the page needs no reinstall: the app loads it from the Mac. Only changes under `android/` need `./gradlew installDebug`.
+
+### On-device checklist
+
+- [ ] After a reboot the panel appears with no status or navigation bar.
+- [ ] Back closes an open window sheet; otherwise nothing happens.
+- [ ] Home and Recents stay on the panel (the app switcher may flash briefly).
+- [ ] Volume keys don't change the tablet's volume.
+- [ ] Holding the top-left corner for 3 s opens the menu; a short tap there still works as a normal tap.
+- [ ] Menu → *Mac address…* with a wrong address shows *Waiting for your Mac…*; fixing it brings the panel back.
+- [ ] Mac display sleep (`pmset displaysleepnow`) or lock (Ctrl-Cmd-Q) turns the tablet black within about a second; waking/unlocking brings it back.
+- [ ] Mac fully asleep: the tablet goes black after ~30 s and comes back when the Mac wakes.
+- [ ] Tapping the black screen shows the panel for a minute.
+
+**AMOLED burn-in**: besides going black with the Mac, the page uses a pure black background and nudges itself 1–2 px every 3 minutes. Keep brightness moderate.
 
 ## Troubleshooting
 
@@ -78,7 +122,11 @@ Unit tests: `/opt/homebrew/opt/lua@5.4/bin/lua tests/run.lua` (`brew install lua
 | No windows, console says `hs.axuielement - module requires accessibility` | Accessibility permission missing — see setup step 2, then reload. |
 | Windows missing | Windows on other Spaces only appear once Hammerspoon has seen them. Untitled and non-standard windows (palettes, popups) are hidden by design. A minimized window of a hidden app reappears when the app is unhidden. |
 | Spotify panel missing or stale | Spotify must be running. Check System Settings → Privacy & Security → Automation → Hammerspoon → Spotify is on. Console warnings start with `tabletpane: spotify:`. |
-| Changes to the page don't show | The page is served with `no-store`; reload in Fully. Lua changes need a Hammerspoon reload (`hs -c 'hs.reload()'`). |
+| Changes to the page don't show | The page is served with `no-store`; escape menu → *Reload*. Lua changes need a Hammerspoon reload (`hs -c 'hs.reload()'`). |
+| `adb devices` shows `unauthorized` | Unplug and replug, and accept the prompt on the tablet. No prompt: *Developer options → Revoke USB debugging authorisations*, then replug. |
+| Gradle fails with just a Java version number (e.g. `27`) | Gradle is running on a too-new Java: `export JAVA_HOME=$(/usr/libexec/java_home -v 17)`. |
+| Home doesn't offer *Mac Panel* | Android remembered another home app: *Settings → Apps → Default apps → Home screen* → Mac Panel. |
+| Tablet stays lit while the Mac sleeps | `curl -s http://<mac-ip>:8765/api/state | jq .display` should say `"awake": false` while the Mac is locked. Debug the page from the Mac in Chrome at `chrome://inspect` (debug builds allow it). |
 | Icons missing | `curl -o x.png http://localhost:8765/icon/com.apple.finder.png && file x.png` should say PNG. |
 
 ## Extending
