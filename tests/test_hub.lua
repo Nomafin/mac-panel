@@ -83,6 +83,13 @@ return function(T)
     T.eq(sent[#sent], stateMsg(2, 9))
   end)
 
+  T.test('action whose state has not changed yet replies without updates (keeps client optimism)', function()
+    local hub, mod = setup()
+    call(hub, { id = 1, cmd = 'hello' })
+    mod.actions.noop = function() return true end
+    T.eq(call(hub, { id = 2, cmd = 'counter.noop' }), { type = 'reply', id = 2, ok = true, updates = {} })
+  end)
+
   T.test('action returning false replies with its error', function()
     local hub = setup()
     T.eq(call(hub, { id = 4, cmd = 'counter.set', args = {} }),

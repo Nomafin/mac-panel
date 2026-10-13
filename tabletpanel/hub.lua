@@ -38,10 +38,12 @@ function Hub:refresh(name)
   return true
 end
 
+-- Returns true when the state changed (and was pushed).
 function Hub:notify(name)
-  if not self:refresh(name) then return end
+  if not self:refresh(name) then return false end
   local ok, err = pcall(self.send, json.encode(self:stateMessage(name)))
   if not ok then self.log('send failed: ' .. tostring(err)) end
+  return true
 end
 
 local function ensureFresh(self, name)
@@ -103,8 +105,11 @@ function Hub:handleMessage(raw)
   end
   if not ok then return reply(id, false, { error = err or 'failed' }) end
 
-  self:notify(modName)
-  return reply(id, true, { updates = json.array({ self:stateMessage(modName) }) })
+  -- Only send state that changed: an unchanged (not yet updated) state would overwrite
+  -- the client's optimistic update, e.g. focus before macOS reports the new window.
+  local updates = json.array({})
+  if self:notify(modName) then updates[1] = self:stateMessage(modName) end
+  return reply(id, true, { updates = updates })
 end
 
 return Hub
