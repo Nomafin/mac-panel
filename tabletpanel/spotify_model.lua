@@ -63,6 +63,29 @@ function Model.isStopNotification(info)
   return type(info) == 'table' and info['Player State'] == 'Stopped'
 end
 
+-- When AppleScript may talk to Spotify. Times are in seconds.
+--  * hold: after a predicted command Spotify reports stale values for ~1 s, so unforced reads wait
+--  * quiet: after a Stopped notification Spotify may be quitting; nothing may talk to it at all
+local HOLD_SECONDS, QUIET_SECONDS = 1.5, 3
+
+local Gate = {}
+Gate.__index = Gate
+
+function Model.newGate()
+  return setmetatable({ holdUntil = 0, quietUntil = 0 }, Gate)
+end
+
+Model.HOLD_SECONDS = HOLD_SECONDS
+
+function Gate:commandPredicted(now) self.holdUntil = now + HOLD_SECONDS end
+function Gate:stopNotified(now) self.quietUntil = now + QUIET_SECONDS end
+function Gate:canCommand(now) return now >= self.quietUntil end
+
+function Gate:canRead(now, force)
+  if now < self.quietUntil then return false end
+  return force or now >= self.holdUntil
+end
+
 local function round(x) return math.floor(x + 0.5) end
 
 function Model.parse(output)

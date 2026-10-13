@@ -15,10 +15,11 @@ local function isRunning()
   return hs.application.get(BUNDLE_ID) ~= nil
 end
 
-local holdUntil = 0 -- after a predicted command, Spotify reports stale values for ~1 s
+local gate = Model.newGate()
+local function now() return hs.timer.secondsSinceEpoch() end
 
 local function read(force)
-  if not force and hs.timer.secondsSinceEpoch() < holdUntil then return end
+  if not gate:canRead(now(), force) then return end
   if not isRunning() then
     current = { running = false }
     return
@@ -43,21 +44,18 @@ local function refresh()
   notify()
 end
 
-local HOLD_SECONDS = 1.5
-local QUIT_QUIET_SECONDS = 3
-
 -- Runs a command, predicts its effect for an instant reply, then re-reads to confirm.
 local function tell(command, name, args)
-  if not isRunning() then return false, 'not_running' end
+  if not isRunning() or not gate:canCommand(now()) then return false, 'not_running' end
   if not hs.osascript.applescript(Model.commandScript(command)) then
     return false, 'applescript_failed'
   end
   local predicted = Model.applyCommand(current, name, args or {})
   if predicted ~= current then
     current = predicted
-    holdUntil = hs.timer.secondsSinceEpoch() + HOLD_SECONDS
+    gate:commandPredicted(now())
     if watchers.confirm then watchers.confirm:stop() end
-    watchers.confirm = hs.timer.doAfter(HOLD_SECONDS, function()
+    watchers.confirm = hs.timer.doAfter(Model.HOLD_SECONDS, function()
       read(true)
       notify()
     end)
@@ -98,7 +96,7 @@ function S.start(notifyFn, logger)
     if Model.isStopNotification(info) then
       -- Possibly quitting: no AppleScript until the app watcher has had a chance to see it exit.
       current = { running = true, state = 'stopped' }
-      holdUntil = hs.timer.secondsSinceEpoch() + QUIT_QUIET_SECONDS
+      gate:stopNotified(now())
       notify()
     else
       refresh()
