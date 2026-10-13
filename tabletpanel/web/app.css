@@ -39,22 +39,32 @@ button { font: inherit; color: inherit; touch-action: manipulation; cursor: poin
 .shell.no-spotify { grid-template-columns: 1fr; }
 
 /* ---------- Window grid ---------- */
-.windows { overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
-.empty { color: var(--muted); padding: 48px; text-align: center; font-size: 18px; }
+/* App groups flow side by side so single-window apps don't each take a full row. */
+.windows {
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 16px 12px;
+  min-width: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.windows::-webkit-scrollbar { display: none; }
+.empty { width: 100%; color: var(--muted); padding: 48px; text-align: center; font-size: 18px; }
 
-.app-group + .app-group { margin-top: 16px; }
+.app-group { min-width: 0; max-width: 100%; }
 .app-head {
   display: flex; align-items: center; gap: 8px;
   margin: 0 2px 8px;
   color: var(--muted); font-size: 14px; font-weight: 600;
 }
-.app-head img { width: 20px; height: 20px; }
+.app-head { width: 0; min-width: 100%; } /* the header never widens its group; tiles do */
+.app-head img { width: 20px; height: 20px; flex: none; }
+.app-head span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tiles { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .tile {
   position: relative;
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  width: 150px;
   min-height: 110px;
   padding: 12px;
   border: 2px solid transparent;

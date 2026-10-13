@@ -290,7 +290,7 @@ function boot() {
     const scroll = winEl.scrollTop;
     winEl.innerHTML = w.apps.map((app) => `
       <section class="app-group">
-        <header class="app-head"><img src="${esc(iconUrl(app.bundleId))}" alt="">${esc(app.name)}</header>
+        <header class="app-head"><img src="${esc(iconUrl(app.bundleId))}" alt=""><span>${esc(app.name)}</span></header>
         <div class="tiles">${app.windows.map((win) => tileHtml(app, win, w.focusedId)).join('')}</div>
       </section>`).join('');
     winEl.scrollTop = scroll;
