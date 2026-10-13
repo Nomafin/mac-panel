@@ -343,22 +343,45 @@ function boot() {
 
   /* ----- windows ----- */
 
-  let knownIds = null; // ids rendered last time; new ones get an entrance
+  // One tile per app. A single-window app focuses on tap; an app with several windows
+  // opens a second layer (the sheet) that grows out of its tile.
+  let knownApps = null; // apps rendered last time; new ones get an entrance
+  let openApp = null; // bundleId shown in the sheet, if any
 
   function iconUrl(bundleId) {
     return MOCK ? mockIcon(bundleId) : 'icon/' + encodeURIComponent(bundleId) + '.png';
   }
 
-  function tileHtml(app, win, focusedId) {
+  function windowFlag(app, win) {
+    return win.minimized ? 'In the Dock' : win.otherSpace ? 'Other Space' : app.hidden ? 'Hidden' : '';
+  }
+
+  function findApp(bundleId) {
+    const w = store.windows;
+    return w && w.apps ? w.apps.find((a) => a.bundleId === bundleId) : null;
+  }
+
+  function tileFor(bundleId) {
+    return grid.querySelector(`.tile[data-app="${CSS.escape(bundleId)}"]`);
+  }
+
+  function tileHtml(app, focusedId) {
+    const single = app.windows.length === 1;
+    const win = app.windows[0];
     const cls = ['tile'];
-    if (win.id === focusedId) cls.push('focused');
-    if (win.minimized) cls.push('minimized');
+    if (app.windows.some((x) => x.id === focusedId)) cls.push('focused');
     if (app.hidden) cls.push('app-hidden');
-    if (knownIds && !knownIds.has(win.id)) cls.push('enter');
-    const flag = win.minimized ? 'In the Dock' : win.otherSpace ? 'Other Space' : app.hidden ? 'Hidden' : '';
-    return `<button class="${cls.join(' ')}" data-id="${win.id}" aria-label="${esc(app.name + ': ' + win.title)}">
+    if (single && win.minimized) cls.push('minimized');
+    if (!single) cls.push('stack');
+    if (knownApps && !knownApps.has(app.bundleId)) cls.push('enter');
+    if (app.bundleId === openApp) cls.push('source'); // it has become the sheet
+    const flag = single ? windowFlag(app, win) : '';
+    const label = single ? app.name + ': ' + win.title : `${app.name}, ${app.windows.length} windows`;
+    return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${single ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}">
         <img class="icon" src="${esc(iconUrl(app.bundleId))}" alt="">
-        <span class="t">${esc(win.title)}</span>
+        ${single
+          ? `<span class="t">${esc(win.title)}</span>`
+          : `<span class="t">${esc(app.name)}</span><span class="count">${app.windows.length} windows</span>`}
         ${flag ? `<span class="flag">${flag}</span>` : ''}
       </button>`;
   }
@@ -368,47 +391,44 @@ function boot() {
     if (!w || !w.apps || !w.apps.length) {
       grid.innerHTML = '<p class="empty">No open windows on your Mac.</p>';
       placeLamp();
+      if (openApp) closeLayer();
       return;
     }
     const scroll = scroller.scrollTop;
-    grid.innerHTML = w.apps.map((app) => `
-      <section class="plate" title="${esc(app.name)}">
-        ${app.windows.map((win) => tileHtml(app, win, w.focusedId)).join('')}
-      </section>`).join('');
-    knownIds = new Set(w.apps.flatMap((a) => a.windows.map((x) => x.id)));
+    grid.innerHTML = w.apps.map((app) => tileHtml(app, w.focusedId)).join('');
+    knownApps = new Set(w.apps.map((a) => a.bundleId));
     scroller.scrollTop = scroll;
     placeLamp();
+    if (openApp) {
+      if (findApp(openApp)) renderCards(false);
+      else closeLayer();
+    }
   }
 
-  // The focus lamp glides to the focused tile instead of being redrawn on it.
+  // The focus lamp glides to the focused tile instead of being redrawn on it. Layout offsets
+  // (not screen rects) keep it right while the grid is scaled back behind the sheet.
   function placeLamp() {
     const tile = grid.querySelector('.tile.focused');
     if (!tile) { lamp.classList.remove('lit'); return; }
-    const s = stage.getBoundingClientRect();
-    const r = tile.getBoundingClientRect();
     const first = !lamp.classList.contains('lit');
     lamp.classList.toggle('instant', first);
-    lamp.style.width = r.width + 'px';
-    lamp.style.height = r.height + 'px';
-    lamp.style.transform = `translate(${r.left - s.left}px, ${r.top - s.top}px)`;
+    lamp.style.width = tile.offsetWidth + 'px';
+    lamp.style.height = tile.offsetHeight + 'px';
+    lamp.style.transform = `translate(${grid.offsetLeft + tile.offsetLeft}px, ${grid.offsetTop + tile.offsetTop}px)`;
     if (first) void lamp.offsetWidth; // apply position before fading in
     lamp.classList.add('lit');
   }
   // Tiles move when the music column slides in/out or the web font arrives; follow them.
   new ResizeObserver(() => placeLamp()).observe(grid);
 
-  function shake(id) {
-    const tile = grid.querySelector(`.tile[data-id="${id}"]`);
-    if (!tile) return;
-    tile.classList.remove('shake');
-    void tile.offsetWidth; // restart the animation
-    tile.classList.add('shake');
+  function shake(el) {
+    if (!el) return;
+    el.classList.remove('shake');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('shake');
   }
 
-  grid.addEventListener('click', (e) => {
-    const tile = e.target.closest('.tile');
-    if (!tile || !store.windows) return;
-    const id = Number(tile.dataset.id);
+  function focusWindow(id, origin) {
     const previous = store.windows.focusedId;
     store.windows.focusedId = id; // optimistic
     renderWindows();
@@ -418,9 +438,120 @@ function boot() {
         store.windows.focusedId = previous;
         renderWindows();
       }
-      shake(id);
+      shake(origin());
     });
+  }
+
+  grid.addEventListener('click', (e) => {
+    const tile = e.target.closest('.tile');
+    if (!tile || !store.windows) return;
+    if (tile.dataset.id) {
+      focusWindow(Number(tile.dataset.id), () => tileFor(tile.dataset.app));
+    } else {
+      openLayer(tile.dataset.app);
+    }
   });
+
+  /* ----- second layer: an app's windows ----- */
+
+  const layer = $('layer'), sheet = $('sheet'), cards = $('cards');
+  const sheetIcon = $('sheet-icon'), sheetTitle = $('sheet-title'), sheetSub = $('sheet-sub');
+  let closeTimer = null;
+
+  // clip-path inset that crops the sheet down to exactly the tile's rectangle
+  function insetFor(tile) {
+    const s = sheet.getBoundingClientRect();
+    const t = tile.getBoundingClientRect();
+    return `inset(${t.top - s.top}px ${s.right - t.right}px ${s.bottom - t.bottom}px ${t.left - s.left}px round 18px)`;
+  }
+
+  // Moves the sheet's icon so it starts (or ends) exactly over the tile's icon.
+  function iconOffset(tile) {
+    const from = tile.querySelector('.icon').getBoundingClientRect();
+    const to = sheetIcon.getBoundingClientRect();
+    const scale = from.width / to.width;
+    return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`;
+  }
+
+  function renderCards(animate) {
+    const app = findApp(openApp);
+    const focusedId = store.windows.focusedId;
+    const known = new Set([...cards.querySelectorAll('.card')].map((c) => Number(c.dataset.id)));
+    sheetTitle.textContent = app.name;
+    sheetSub.textContent = app.windows.length === 1 ? '1 window' : `${app.windows.length} windows`;
+    cards.innerHTML = app.windows.map((win, i) => {
+      const cls = ['card'];
+      if (win.id === focusedId) cls.push('focused');
+      if (win.minimized) cls.push('minimized');
+      if (animate || !known.has(win.id)) cls.push('fan');
+      const flag = windowFlag(app, win);
+      return `<button class="${cls.join(' ')}" data-id="${win.id}" style="--i:${i}">
+          <span class="ct">${esc(win.title)}</span>
+          ${flag ? `<span class="flag">${flag}</span>` : ''}
+        </button>`;
+    }).join('');
+  }
+
+  function fitSheet() {
+    const r = scroller.getBoundingClientRect();
+    Object.assign(sheet.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', maxHeight: r.height + 'px' });
+  }
+
+  function openLayer(bundleId) {
+    const tile = tileFor(bundleId);
+    if (!tile) return;
+    clearTimeout(closeTimer);
+    openApp = bundleId;
+    sheetIcon.src = iconUrl(bundleId);
+    layer.hidden = false;
+    layer.classList.remove('open', 'closing');
+    fitSheet();
+    renderCards(true);
+    // Start as the tile, then grow: clip-path and icon jump to the tile with no transition…
+    sheet.classList.add('no-anim');
+    sheet.style.clipPath = insetFor(tile);
+    sheetIcon.style.transform = iconOffset(tile);
+    void sheet.offsetWidth;
+    // …and animate to the full sheet.
+    sheet.classList.remove('no-anim');
+    sheet.style.clipPath = 'inset(0px 0px 0px 0px round 26px)';
+    sheetIcon.style.transform = '';
+    layer.classList.add('open');
+    document.body.classList.add('layer-open');
+    tile.classList.add('source');
+  }
+
+  function closeLayer() {
+    if (!openApp) return;
+    const tile = tileFor(openApp);
+    openApp = null;
+    layer.classList.remove('open');
+    layer.classList.add('closing');
+    document.body.classList.remove('layer-open');
+    if (tile) {
+      sheet.style.clipPath = insetFor(tile);
+      sheetIcon.style.transform = iconOffset(tile);
+    }
+    closeTimer = setTimeout(() => {
+      layer.hidden = true;
+      layer.classList.remove('closing');
+      grid.querySelectorAll('.tile.source').forEach((t) => t.classList.remove('source'));
+    }, 620);
+  }
+
+  cards.addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    const id = Number(card.dataset.id);
+    const app = openApp;
+    focusWindow(id, () => tileFor(app));
+    closeLayer();
+  });
+  $('layer-backdrop').addEventListener('click', closeLayer);
+  $('sheet-close').addEventListener('click', closeLayer);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLayer(); });
+  window.addEventListener('resize', () => { if (openApp) fitSheet(); });
+
 
   /* ----- spotify ----- */
 
