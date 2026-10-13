@@ -4,6 +4,7 @@
 local Hub = require('tabletpanel.hub')
 local Server = require('tabletpanel.server')
 local netguard = require('tabletpanel.netguard')
+local windows = require('tabletpanel.windows')
 
 local M = {}
 
@@ -18,13 +19,13 @@ local log = hs.logger.new('tabletpanel', 'info')
 function M.start(overrides)
   for k, v in pairs(overrides or {}) do M.config[k] = v end
 
-  M.modules = {}
+  M.modules = { windows }
   local server
   local hub = Hub.new({
     send = function(message) server:send(message) end,
     log = function(message) log.i(message) end,
   })
-  server = Server.new({ port = M.config.port, webDir = DIR .. 'web/', hub = hub, log = log })
+  server = Server.new({ port = M.config.port, webDir = DIR .. 'web/', hub = hub, icon = windows.icon, log = log })
   for _, mod in ipairs(M.modules) do hub:register(mod) end
 
   local active = false
@@ -33,7 +34,8 @@ function M.start(overrides)
     active = on
     if on then
       for _, mod in ipairs(M.modules) do
-        mod.start(function() hub:notify(mod.name) end, log)
+        local ok, err = pcall(mod.start, function() hub:notify(mod.name) end, log)
+        if not ok then log.e('module ' .. mod.name .. ' failed to start: ' .. tostring(err)) end
       end
       server:start()
       log.i('listening on port ' .. M.config.port)

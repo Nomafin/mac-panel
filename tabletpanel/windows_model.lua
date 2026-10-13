@@ -24,7 +24,9 @@ function Model:build(raw, focusedId)
   local apps, appList, seenApps, seenWins = {}, {}, {}, {}
 
   for _, w in ipairs(raw) do
-    if w.id and w.bundleId and w.standard and w.title and w.title ~= '' then
+    -- Minimized windows can report a non-standard AX subrole (Finder on macOS 26),
+    -- and panels/popups can't be minimized, so minimized counts as standard.
+    if w.id and w.bundleId and (w.standard or w.minimized) and w.title and w.title ~= '' then
       seenWins[w.id], seenApps[w.bundleId] = true, true
       local app = apps[w.bundleId]
       if not app then

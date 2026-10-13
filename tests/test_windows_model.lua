@@ -63,6 +63,11 @@ return function(T)
     T.eq(ids(m:build(raw)), { 1 })
   end)
 
+  T.test('keeps minimized windows that AX reports as non-standard (Finder on macOS 26)', function()
+    local m = Model.new()
+    T.eq(ids(m:build({ win(1, 'a.A', 'Downloads', { minimized = true, standard = false }) })), { 1 })
+  end)
+
   T.test('otherSpace only for visible windows off the current Space', function()
     local m = Model.new()
     local s = m:build({
