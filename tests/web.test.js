@@ -75,6 +75,37 @@ test('demotion detector fires after consecutive ping replies that carried missed
   assert.equal(missed(1), false); // resets after firing
 });
 
+function pixels(...rgbs) {
+  const out = [];
+  rgbs.forEach(([r, g, b, n = 1]) => { for (let i = 0; i < n; i++) out.push(r, g, b, 255); });
+  return Uint8ClampedArray.from(out);
+}
+
+test('rgbToHsl converts primaries and greys', () => {
+  assert.deepEqual(h.rgbToHsl(255, 0, 0).map((v) => Math.round(v * 100) / 100), [0, 1, 0.5]);
+  assert.deepEqual(h.rgbToHsl(0, 0, 255).map((v) => Math.round(v * 100) / 100), [240, 1, 0.5]);
+  assert.equal(h.rgbToHsl(128, 128, 128)[1], 0);
+});
+
+test('pickAccent follows the dominant saturated hue, not a single stray pixel', () => {
+  const accent = h.pickAccent(pixels([200, 40, 40, 30], [40, 60, 220, 1], [20, 20, 20, 30]));
+  assert.ok(accent.h < 20 || accent.h > 340, 'red wins: ' + accent.h);
+});
+
+test('pickAccent lifts dark colours so they read on black', () => {
+  const accent = h.pickAccent(pixels([10, 20, 90, 50]));
+  assert.ok(accent.l >= 0.6 && accent.l <= 0.75, 'lightness ' + accent.l);
+  assert.ok(accent.h > 220 && accent.h < 240, 'hue kept ' + accent.h);
+});
+
+test('pickAccent returns null for greyscale art', () => {
+  assert.equal(h.pickAccent(pixels([30, 30, 30, 20], [200, 200, 200, 20])), null);
+});
+
+test('accentCss formats an hsl colour', () => {
+  assert.equal(h.accentCss({ h: 210.4, s: 0.8, l: 0.68 }), 'hsl(210 80% 68%)');
+});
+
 test('mockState variants', () => {
   assert.equal(h.mockState('nospotify').spotify.running, false);
   assert.equal(h.mockState('idle').spotify.state, 'stopped');

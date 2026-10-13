@@ -5,14 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta name="theme-color" content="#000000">
   <title>Mac Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&display=swap">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <div id="shell" class="shell no-spotify">
-    <main id="windows" class="windows"></main>
-    <aside id="spotify" class="spotify" hidden></aside>
+  <div class="ambient" aria-hidden="true">
+    <div class="glow" id="glow-a"></div>
+    <div class="glow" id="glow-b"></div>
   </div>
-  <div id="overlay" class="overlay" hidden>Reconnecting…</div>
+  <div id="shell" class="shell no-spotify">
+    <main id="windows" class="windows">
+      <div id="stage" class="stage">
+        <div id="lamp" class="lamp" aria-hidden="true"></div>
+        <div id="grid" class="grid"></div>
+      </div>
+    </main>
+    <aside id="spotify" class="spotify"></aside>
+  </div>
+  <div id="overlay" class="overlay" hidden>Reconnecting to your Mac…</div>
   <div id="dot" class="dot"></div>
   <script src="app.js"></script>
 </body>

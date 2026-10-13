@@ -70,16 +70,64 @@ function makeDemotionDetector(threshold) {
   };
 }
 
+// [hue 0–360, saturation 0–1, lightness 0–1]
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+
+// The album's accent: the hue family with the most saturated mid-tone weight, lifted so it
+// reads on black. Returns null for greyscale art.
+function pickAccent(rgba) {
+  const buckets = Array.from({ length: 12 }, () => ({ w: 0, x: 0, y: 0, s: 0 }));
+  const pixelCount = rgba.length / 4;
+  let total = 0;
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (rgba[i + 3] < 128) continue;
+    const [hue, sat, light] = rgbToHsl(rgba[i], rgba[i + 1], rgba[i + 2]);
+    const w = sat * (1 - Math.abs(light - 0.5) * 1.6);
+    if (w <= 0.05) continue;
+    const b = buckets[Math.floor(hue / 30) % 12];
+    const rad = (hue * Math.PI) / 180;
+    b.w += w; b.x += Math.cos(rad) * w; b.y += Math.sin(rad) * w; b.s += sat * w;
+    total += w;
+  }
+  const best = buckets.reduce((a, b) => (b.w > a.w ? b : a));
+  if (best.w === 0 || total / pixelCount < 0.02) return null;
+  let hue = (Math.atan2(best.y, best.x) * 180) / Math.PI;
+  if (hue < 0) hue += 360;
+  return { h: hue, s: Math.min(0.85, Math.max(0.45, best.s / best.w)), l: 0.68 };
+}
+
+function accentCss(a) {
+  return `hsl(${Math.round(a.h)} ${Math.round(a.s * 100)}% ${Math.round(a.l * 100)}%)`;
+}
+
 /* ---------- Mock mode (?mock, ?mock=idle, ?mock=nospotify) ---------- */
+
+function mockArt(h1, h2) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h1},70%,55%)"/><stop offset="1" stop-color="hsl(${h2},60%,18%)"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><circle cx="190" cy="120" r="70" fill="hsl(${h1},80%,72%)" opacity=".55"/></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+const MOCK_TRACKS = [
+  { id: 'spotify:track:mock1', name: 'Midnight City', artist: 'M83', album: "Hurry Up, We're Dreaming", durationMs: 243000, artworkUrl: mockArt(320, 250) },
+  { id: 'spotify:track:mock2', name: 'Teardrop', artist: 'Massive Attack', album: 'Mezzanine', durationMs: 330000, artworkUrl: mockArt(170, 210) },
+];
 
 function mockState(variant) {
   const spotify = variant === 'nospotify' ? { running: false }
     : variant === 'idle' ? { running: true, state: 'stopped' }
-    : {
-      running: true, state: 'playing',
-      track: { id: 'spotify:track:mock', name: 'Midnight City', artist: 'M83', album: "Hurry Up, We're Dreaming", durationMs: 243000, artworkUrl: '' },
-      positionMs: 61000, volume: 65, shuffle: false, repeat: true,
-    };
+    : { running: true, state: 'playing', track: MOCK_TRACKS[0], positionMs: 61000, volume: 65, shuffle: false, repeat: true };
   return {
     windows: {
       focusedId: 11,
@@ -119,6 +167,7 @@ class MockSocket {
     this.readyState = 0;
     this.state = mockState(variant);
     this.v = 1;
+    this.trackIndex = 0;
     setTimeout(() => { this.readyState = 1; if (this.onopen) this.onopen(); }, 50);
   }
 
@@ -144,6 +193,10 @@ class MockSocket {
       else if (action === 'volume') sp.volume = args.value;
       else if (action === 'shuffle') sp.shuffle = !sp.shuffle;
       else if (action === 'repeat') sp.repeat = !sp.repeat;
+      else if (action === 'next' || action === 'previous') {
+        this.trackIndex = (this.trackIndex + 1) % MOCK_TRACKS.length;
+        Object.assign(sp, { track: MOCK_TRACKS[this.trackIndex], positionMs: 0, state: 'playing' });
+      }
     }
     if (mod in this.state) {
       this.v += 1;
@@ -161,12 +214,13 @@ class MockSocket {
 /* ---------- App (browser only) ---------- */
 
 const ICONS = {
-  play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
-  pause: '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
-  prev: '<svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12 18 18V6z"/></svg>',
-  next: '<svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>',
-  shuffle: '<svg viewBox="0 0 24 24"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>',
-  repeat: '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>',
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="1.3"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.3"/></svg>',
+  prev: '<svg viewBox="0 0 24 24"><rect x="5" y="6" width="2.4" height="12" rx="1"/><path d="M19 7.1v9.8a.9.9 0 0 1-1.4.75l-7.6-4.9a.9.9 0 0 1 0-1.5l7.6-4.9A.9.9 0 0 1 19 7.1z"/></svg>',
+  next: '<svg viewBox="0 0 24 24"><rect x="16.6" y="6" width="2.4" height="12" rx="1"/><path d="M5 7.1v9.8a.9.9 0 0 0 1.4.75l7.6-4.9a.9.9 0 0 0 0-1.5L6.4 6.35A.9.9 0 0 0 5 7.1z"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3.5c2 0 3.2 1 4.3 2.7l2.4 4.6C14.3 16 15.5 17 17.5 17H21"/><path d="M3 17h3.5c1.4 0 2.4-.5 3.2-1.4M14.3 8.4C15.1 7.5 16.1 7 17.5 7H21"/><path d="m18.5 4.5 2.5 2.5-2.5 2.5M18.5 14.5l2.5 2.5-2.5 2.5"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V9.5A3.5 3.5 0 0 1 7.5 6H19"/><path d="m16 3 3 3-3 3"/><path d="M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H5"/><path d="m8 21-3-3 3-3"/></svg>',
+  speaker: '<svg viewBox="0 0 24 24"><path d="M4 9.5v5a1 1 0 0 0 1 1h3l4.3 3.6a.8.8 0 0 0 1.3-.6V5.5a.8.8 0 0 0-1.3-.6L8 8.5H5a1 1 0 0 0-1 1z"/><path d="M16.5 8.8a4.5 4.5 0 0 1 0 6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
 };
 
 const PING_MS = 2000;
@@ -174,14 +228,20 @@ const CONNECT_TIMEOUT_MS = 3000; // an unanswered connect (Mac asleep) can other
 const STALE_MS = 7000; // no message for this long => socket is dead (e.g. after tablet sleep)
 const SHIFT_MS = 180000; // AMOLED burn-in: nudge the whole UI every 3 minutes
 const SHIFTS = [[0, 0], [1, 1], [2, 0], [1, -1], [0, -2], [-1, -1], [-2, 0], [-1, 1]];
+const DEFAULT_ACCENT = '#9db4ff';
 
 function boot() {
   const params = new URLSearchParams(location.search);
   const MOCK = params.has('mock');
   const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
   const shell = $('shell');
-  const winEl = $('windows');
+  const scroller = $('windows');
+  const stage = $('stage');
+  const grid = $('grid');
+  const lamp = $('lamp');
   const spEl = $('spotify');
+  const glows = [$('glow-a'), $('glow-b')];
   const overlay = $('overlay');
   const dot = $('dot');
 
@@ -283,6 +343,8 @@ function boot() {
 
   /* ----- windows ----- */
 
+  let knownIds = null; // ids rendered last time; new ones get an entrance
+
   function iconUrl(bundleId) {
     return MOCK ? mockIcon(bundleId) : 'icon/' + encodeURIComponent(bundleId) + '.png';
   }
@@ -292,38 +354,58 @@ function boot() {
     if (win.id === focusedId) cls.push('focused');
     if (win.minimized) cls.push('minimized');
     if (app.hidden) cls.push('app-hidden');
-    const badge = win.minimized ? 'Minimized' : win.otherSpace ? 'Other Space' : app.hidden ? 'Hidden' : '';
-    return `<button class="${cls.join(' ')}" data-id="${win.id}">
-        <img class="tile-icon" src="${esc(iconUrl(app.bundleId))}" alt="">
-        <span class="tile-title">${esc(win.title)}</span>
-        ${badge ? `<span class="badge">${badge}</span>` : ''}
+    if (knownIds && !knownIds.has(win.id)) cls.push('enter');
+    const flag = win.minimized ? 'In the Dock' : win.otherSpace ? 'Other Space' : app.hidden ? 'Hidden' : '';
+    return `<button class="${cls.join(' ')}" data-id="${win.id}" aria-label="${esc(app.name + ': ' + win.title)}">
+        <img class="icon" src="${esc(iconUrl(app.bundleId))}" alt="">
+        <span class="t">${esc(win.title)}</span>
+        ${flag ? `<span class="flag">${flag}</span>` : ''}
       </button>`;
   }
 
   function renderWindows() {
     const w = store.windows;
     if (!w || !w.apps || !w.apps.length) {
-      winEl.innerHTML = '<div class="empty">No windows</div>';
+      grid.innerHTML = '<p class="empty">No open windows on your Mac.</p>';
+      placeLamp();
       return;
     }
-    const scroll = winEl.scrollTop;
-    winEl.innerHTML = w.apps.map((app) => `
-      <section class="app-group">
-        <header class="app-head"><img src="${esc(iconUrl(app.bundleId))}" alt=""><span>${esc(app.name)}</span></header>
-        <div class="tiles">${app.windows.map((win) => tileHtml(app, win, w.focusedId)).join('')}</div>
+    const scroll = scroller.scrollTop;
+    grid.innerHTML = w.apps.map((app) => `
+      <section class="plate" title="${esc(app.name)}">
+        ${app.windows.map((win) => tileHtml(app, win, w.focusedId)).join('')}
       </section>`).join('');
-    winEl.scrollTop = scroll;
+    knownIds = new Set(w.apps.flatMap((a) => a.windows.map((x) => x.id)));
+    scroller.scrollTop = scroll;
+    placeLamp();
   }
 
+  // The focus lamp glides to the focused tile instead of being redrawn on it.
+  function placeLamp() {
+    const tile = grid.querySelector('.tile.focused');
+    if (!tile) { lamp.classList.remove('lit'); return; }
+    const s = stage.getBoundingClientRect();
+    const r = tile.getBoundingClientRect();
+    const first = !lamp.classList.contains('lit');
+    lamp.classList.toggle('instant', first);
+    lamp.style.width = r.width + 'px';
+    lamp.style.height = r.height + 'px';
+    lamp.style.transform = `translate(${r.left - s.left}px, ${r.top - s.top}px)`;
+    if (first) void lamp.offsetWidth; // apply position before fading in
+    lamp.classList.add('lit');
+  }
+  // Tiles move when the music column slides in/out or the web font arrives; follow them.
+  new ResizeObserver(() => placeLamp()).observe(grid);
+
   function shake(id) {
-    const tile = winEl.querySelector(`.tile[data-id="${id}"]`);
+    const tile = grid.querySelector(`.tile[data-id="${id}"]`);
     if (!tile) return;
     tile.classList.remove('shake');
     void tile.offsetWidth; // restart the animation
     tile.classList.add('shake');
   }
 
-  winEl.addEventListener('click', (e) => {
+  grid.addEventListener('click', (e) => {
     const tile = e.target.closest('.tile');
     if (!tile || !store.windows) return;
     const id = Number(tile.dataset.id);
@@ -344,58 +426,134 @@ function boot() {
 
   spEl.innerHTML = `
     <div class="sp-full">
-      <img class="art" id="sp-art" alt="">
-      <div class="meta"><div class="title" id="sp-title"></div><div class="sub" id="sp-sub"></div></div>
-      <div>
-        <div class="progress" id="sp-progress"><div class="rail"></div><div class="fill" id="sp-fill"></div></div>
+      <div class="art-wrap" id="art-wrap">
+        <img class="art" id="art-a" alt="" crossorigin="anonymous">
+        <img class="art" id="art-b" alt="" crossorigin="anonymous">
+      </div>
+      <div class="meta" id="sp-meta">
+        <div class="title" id="sp-title"></div>
+        <div class="artist" id="sp-artist"></div>
+        <div class="album" id="sp-album"></div>
+      </div>
+      <div class="scrub" id="sp-progress" aria-label="Seek">
+        <div class="rail"><div class="fill" id="sp-fill"></div></div>
         <div class="times"><span id="sp-pos">0:00</span><span id="sp-dur">0:00</span></div>
       </div>
       <div class="transport">
-        <button class="btn" data-cmd="previous" aria-label="Previous">${ICONS.prev}</button>
-        <button class="btn play" data-cmd="playpause" id="sp-play" aria-label="Play/Pause">${ICONS.play}</button>
-        <button class="btn" data-cmd="next" aria-label="Next">${ICONS.next}</button>
-      </div>
-      <div class="row">
         <button class="btn toggle" data-cmd="shuffle" id="sp-shuffle" aria-label="Shuffle">${ICONS.shuffle}</button>
-        <input type="range" min="0" max="100" step="1" id="sp-vol" aria-label="Volume">
+        <button class="btn" data-cmd="previous" aria-label="Previous track">${ICONS.prev}</button>
+        <button class="btn play" data-cmd="playpause" id="sp-play" aria-label="Play or pause">${ICONS.play}</button>
+        <button class="btn" data-cmd="next" aria-label="Next track">${ICONS.next}</button>
         <button class="btn toggle" data-cmd="repeat" id="sp-repeat" aria-label="Repeat">${ICONS.repeat}</button>
       </div>
+      <label class="volume">${ICONS.speaker}<input type="range" min="0" max="100" step="1" id="sp-vol" aria-label="Spotify volume"></label>
     </div>
     <div class="sp-idle">
-      <div class="idle-text">Nothing playing</div>
+      <p>Nothing playing in Spotify.</p>
       <button class="btn play" data-cmd="playpause" aria-label="Play">${ICONS.play}</button>
     </div>`;
 
-  const artEl = $('sp-art'), titleEl = $('sp-title'), subEl = $('sp-sub');
+  const arts = [$('art-a'), $('art-b')];
+  const artWrap = $('art-wrap'), meta = $('sp-meta');
+  const titleEl = $('sp-title'), artistEl = $('sp-artist'), albumEl = $('sp-album');
   const progEl = $('sp-progress'), fillEl = $('sp-fill'), posEl = $('sp-pos'), durEl = $('sp-dur');
   const playBtn = $('sp-play'), shuffleBtn = $('sp-shuffle'), repeatBtn = $('sp-repeat'), volEl = $('sp-vol');
   let volDragging = false;
   let volReleaseTimer = null;
+  let shownTrackId = null;
+  let shownArtUrl = null;
+  let front = 0; // which art/glow layer is visible
+
+  function setAccent(color) {
+    root.style.setProperty('--accent', color || DEFAULT_ACCENT);
+  }
+
+  function sampleAccent(url) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = 24;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 24, 24);
+        const accent = pickAccent(ctx.getImageData(0, 0, 24, 24).data);
+        if (url === shownArtUrl) setAccent(accent && accentCss(accent));
+      } catch (_) { setAccent(null); }
+    };
+    img.onerror = () => setAccent(null);
+    img.src = url;
+  }
+
+  // Track change: the one orchestrated moment. Art, ambient light and accent cross-fade together.
+  function showArt(url) {
+    if (url === shownArtUrl) return;
+    shownArtUrl = url;
+    const next = 1 - front;
+    const img = arts[next];
+    const reveal = () => {
+      if (shownArtUrl !== url) return;
+      arts[front].classList.remove('front');
+      glows[front].classList.remove('on');
+      img.classList.add('front');
+      glows[next].style.backgroundImage = url ? `url("${url}")` : 'none';
+      glows[next].classList.add('on');
+      front = next;
+    };
+    if (!url) {
+      img.removeAttribute('src');
+      reveal();
+      setAccent(null);
+      return;
+    }
+    img.onload = reveal;
+    img.onerror = reveal;
+    img.src = url;
+    sampleAccent(url);
+  }
+
+  function retitle(t) {
+    titleEl.textContent = t.name;
+    artistEl.textContent = t.artist;
+    albumEl.textContent = t.album;
+    meta.classList.remove('swap');
+    void meta.offsetWidth; // restart the entrance
+    meta.classList.add('swap');
+  }
 
   function renderSpotify() {
     const sp = store.spotify;
     const running = !!(sp && sp.running);
+    const hasTrack = running && sp.state !== 'stopped' && !!sp.track;
     shell.classList.toggle('no-spotify', !running);
-    spEl.hidden = !running;
-    if (!running) return;
-    const hasTrack = sp.state !== 'stopped' && !!sp.track;
-    spEl.classList.toggle('idle', !hasTrack);
-    if (!hasTrack) return;
+    spEl.classList.toggle('idle', running && !hasTrack);
+    document.body.classList.toggle('playing', hasTrack && sp.state === 'playing');
+    document.body.classList.toggle('has-music', hasTrack);
+    if (!hasTrack) {
+      glows.forEach((g) => g.classList.remove('on'));
+      shownArtUrl = null;
+      shownTrackId = null;
+      setAccent(null);
+      return;
+    }
 
     const t = sp.track;
-    if (t.artworkUrl) {
-      if (artEl.getAttribute('src') !== t.artworkUrl) artEl.src = t.artworkUrl;
-    } else {
-      artEl.removeAttribute('src');
+    if (t.id !== shownTrackId) {
+      shownTrackId = t.id;
+      retitle(t);
     }
-    titleEl.textContent = t.name;
-    subEl.textContent = [t.artist, t.album].filter(Boolean).join(' · ');
+    showArt(t.artworkUrl || '');
     durEl.textContent = formatTime(t.durationMs);
     playBtn.innerHTML = sp.state === 'playing' ? ICONS.pause : ICONS.play;
     shuffleBtn.classList.toggle('on', !!sp.shuffle);
     repeatBtn.classList.toggle('on', !!sp.repeat);
-    if (!volDragging) volEl.value = sp.volume;
+    if (!volDragging) setVolume(sp.volume);
     tickProgress();
+  }
+
+  function setVolume(v) {
+    volEl.value = v;
+    volEl.style.setProperty('--v', v + '%');
   }
 
   function tickProgress() {
@@ -403,10 +561,10 @@ function boot() {
     if (!sp || !sp.track) return;
     const pos = estimatePosition(sp, store.spotifyAt, Date.now());
     const dur = sp.track.durationMs;
-    fillEl.style.width = (dur ? Math.min(100, (pos / dur) * 100) : 0) + '%';
+    fillEl.style.transform = `scaleX(${dur ? Math.min(1, pos / dur) : 0})`;
     posEl.textContent = formatTime(pos);
   }
-  setInterval(tickProgress, 500);
+  setInterval(tickProgress, 250);
 
   spEl.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-cmd]');
@@ -440,6 +598,7 @@ function boot() {
   volEl.addEventListener('input', () => {
     volDragging = true;
     clearTimeout(volReleaseTimer);
+    setVolume(Number(volEl.value));
     sendVolume(Number(volEl.value));
   });
   volEl.addEventListener('change', () => {
@@ -455,7 +614,7 @@ function boot() {
   setInterval(() => {
     shiftIndex = (shiftIndex + 1) % SHIFTS.length;
     const [x, y] = SHIFTS[shiftIndex];
-    shell.style.transform = `translate(${x}px, ${y}px)`;
+    shell.style.translate = `${x}px ${y}px`;
   }, SHIFT_MS);
 
   console.log('tabletpanel UA:', navigator.userAgent);
@@ -464,6 +623,9 @@ function boot() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector, mockState };
+  module.exports = {
+    esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector,
+    rgbToHsl, pickAccent, accentCss, mockState,
+  };
 }
 if (typeof document !== 'undefined') boot();

@@ -1,13 +1,23 @@
+/* Lit by the music: pure black (AMOLED pixels off), quiet plates for windows, and the
+   current album art as the only light source — its glow and accent colour tie both halves. */
+
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #9db4ff;
+}
+
 :root {
-  --bg: #000;
-  --surface: #121418;
-  --surface-2: #1d2027;
-  --rail: #2b2f37;
-  --text: #f2f3f5;
-  --muted: #8b919b;
-  --accent: #4c9dff;
-  --green: #1ed760;
-  --radius: 14px;
+  --void: #000;
+  --plate: #15161b;
+  --plate-hi: #22242c;
+  --ink: #eeeaf4;
+  --dim: #8e8c99;
+  --accent: #9db4ff;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --panel: 320px;
+  transition: --accent 1.4s ease;
 }
 
 * { box-sizing: border-box; }
@@ -17,149 +27,391 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font: 16px/1.3 system-ui, Roboto, -apple-system, sans-serif;
+  background: var(--void);
+  color: var(--ink);
+  font-family: 'Bricolage Grotesque', system-ui, Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.3;
+  font-optical-sizing: auto;
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- Ambient light: the album art, tiny and scaled up, so the blur is nearly free ---------- */
+.ambient {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* A pool of light behind the album that falls off to true black. */
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 80% 46%, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 78% at 80% 46%, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+}
+.glow {
+  position: absolute;
+  left: 72%;
+  top: 46%;
+  width: 64px;
+  height: 64px;
+  background: center / cover no-repeat;
+  filter: blur(5px) saturate(1.7);
+  transform: translate(-50%, -50%) scale(22);
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  will-change: transform, opacity;
+  animation: drift 48s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+.glow.on { opacity: 0.5; }
+body:not(.playing) .glow.on { opacity: 0.2; }
+body.playing .glow { animation-play-state: running; }
+
+@keyframes drift {
+  0% { transform: translate(-50%, -50%) scale(22) rotate(0deg); }
+  50% { transform: translate(-58%, -44%) scale(25) rotate(18deg); }
+  100% { transform: translate(-44%, -54%) scale(21) rotate(-12deg); }
+}
 
 /* ---------- Layout ---------- */
 .shell {
+  position: relative;
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) var(--panel);
+  column-gap: 20px;
   height: 100vh;
-  padding: 12px;
-  transition: transform 1s;
+  padding: 14px 14px 14px 16px;
+  transition: grid-template-columns 0.7s var(--ease-out), translate 1s;
 }
-.shell.no-spotify { grid-template-columns: 1fr; }
+.shell.no-spotify { grid-template-columns: minmax(0, 1fr) 0px; column-gap: 0; }
 
-/* ---------- Window grid ---------- */
-/* App groups flow side by side so single-window apps don't each take a full row. */
+/* ---------- Windows ---------- */
 .windows {
-  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 16px 12px;
   min-width: 0;
-  overflow-y: auto; overscroll-behavior: contain;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 .windows::-webkit-scrollbar { display: none; }
-.empty { width: 100%; color: var(--muted); padding: 48px; text-align: center; font-size: 18px; }
 
-.app-group { min-width: 0; max-width: 100%; }
-.app-head {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 2px 8px;
-  color: var(--muted); font-size: 14px; font-weight: 600;
+.stage { position: relative; min-height: 100%; }
+.grid {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 12px;
 }
-.app-head { width: 0; min-width: 100%; } /* the header never widens its group; tiles do */
-.app-head img { width: 20px; height: 20px; flex: none; }
-.app-head span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-.tiles { display: flex; flex-wrap: wrap; gap: 10px; }
+/* One plate per app; its windows sit side by side inside it. */
+.plate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: 22px;
+  background: rgba(21, 22, 27, 0.82);
+}
 
 .tile {
   position: relative;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-  width: 150px;
-  min-height: 110px;
-  padding: 12px;
-  border: 2px solid transparent;
-  border-radius: var(--radius);
-  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 142px;
+  min-height: 112px;
+  padding: 12px 12px 11px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
   text-align: left;
+  transition: background 0.2s, transform 0.25s var(--ease-spring);
 }
-.tile:active { background: var(--surface-2); transform: scale(0.98); }
-.tile.focused { border-color: var(--accent); }
-.tile.minimized, .tile.app-hidden { opacity: 0.5; }
-.tile-icon { width: 48px; height: 48px; }
-.tile-title {
+.tile:active { background: var(--plate-hi); transform: scale(0.95); }
+
+.icon {
+  width: 46px;
+  height: 46px;
+  transition: transform 0.4s var(--ease-spring), filter 0.4s, opacity 0.4s;
+}
+.tile.focused .icon { transform: translateY(-2px) scale(1.06); }
+
+.t {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 16px; line-height: 1.25;
   overflow-wrap: anywhere;
+  font-size: 16px;
+  font-stretch: 82%;
+  font-weight: 450;
+  line-height: 1.2;
+  color: var(--ink);
 }
-.badge {
-  position: absolute; top: 10px; right: 10px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--muted); font-size: 12px;
+
+/* Minimized windows look tucked away: the icon sinks and loses its colour. */
+.tile.minimized .icon { transform: translateY(5px) scale(0.78); filter: grayscale(0.85); opacity: 0.6; }
+.tile.minimized .t, .tile.app-hidden .t { color: var(--dim); }
+.tile.app-hidden .icon { opacity: 0.45; }
+
+.flag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 12px;
+  font-stretch: 85%;
+  color: var(--dim);
 }
-.tile.shake { animation: shake 0.4s; }
-@keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+.tile.enter { animation: arrive 0.6s var(--ease-spring) both; }
+@keyframes arrive {
+  from { opacity: 0; transform: scale(0.7); }
+}
+.tile.shake { animation: shake 0.42s; }
+@keyframes shake { 25% { transform: translateX(-7px); } 75% { transform: translateX(7px); } }
+
+.empty { margin: 40px 8px; color: var(--dim); font-size: 18px; }
+
+/* The focus lamp: one light that glides to whichever window has focus. */
+.lamp {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  border-radius: 18px;
+  pointer-events: none;
+  opacity: 0;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 28px -4px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition:
+    transform 0.55s var(--ease-out),
+    width 0.55s var(--ease-out),
+    height 0.55s var(--ease-out),
+    opacity 0.3s;
+}
+.lamp.lit { opacity: 1; }
+.lamp.instant { transition: opacity 0.3s; }
 
 /* ---------- Spotify ---------- */
 .spotify {
   min-width: 0;
-  padding: 16px;
-  border-radius: var(--radius);
-  background: var(--surface);
   overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.5s 0.2s;
 }
-.spotify.idle { align-self: start; }
-.sp-full { display: flex; flex-direction: column; gap: 14px; height: 100%; }
+.no-spotify .spotify { opacity: 0; transition-delay: 0s; }
+
+.sp-full {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  width: var(--panel);
+  height: 100%;
+  padding: 4px 4px 4px 0;
+}
 .spotify .sp-idle { display: none; }
 .spotify.idle .sp-full { display: none; }
-.spotify.idle .sp-idle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.idle-text { color: var(--muted); font-size: 18px; }
+.spotify.idle .sp-idle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: var(--panel);
+  padding: 14px 14px 14px 20px;
+  border-radius: 22px;
+  background: rgba(21, 22, 27, 0.82);
+}
+.sp-idle p { margin: 0; color: var(--dim); font-size: 17px; }
 
-.art { width: 100%; aspect-ratio: 1; border-radius: 10px; background: var(--surface-2); object-fit: cover; }
+.art-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  transition: transform 0.7s var(--ease-spring);
+}
+body:not(.playing) .art-wrap { transform: scale(0.92); }
+.art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  object-fit: cover;
+  background: var(--plate);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transform: scale(0.94) rotate(-1.5deg);
+  transition: opacity 0.9s ease, transform 1.1s var(--ease-out);
+}
+.art:not([src]) { visibility: hidden; }
+.art.front { opacity: 1; transform: none; z-index: 1; }
+
 .meta { min-width: 0; }
-.title, .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.title { font-size: 20px; font-weight: 700; }
-.sub { color: var(--muted); font-size: 15px; margin-top: 2px; }
+.title, .artist, .album { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  font-stretch: 88%;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.artist { margin-top: 4px; font-size: 18px; font-weight: 500; }
+.album { margin-top: 2px; font-size: 15px; color: var(--dim); }
+.meta.swap > * { animation: rise 0.7s var(--ease-out) both; }
+.meta.swap .artist { animation-delay: 0.08s; }
+.meta.swap .album { animation-delay: 0.16s; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+}
 
-.progress { position: relative; height: 32px; touch-action: none; cursor: pointer; }
-.progress .rail, .progress .fill { position: absolute; left: 0; top: 14px; height: 4px; border-radius: 2px; }
-.progress .rail { right: 0; background: var(--rail); }
-.progress .fill { width: 0; background: var(--text); }
+/* Progress: tap anywhere on the strip to seek. */
+.scrub { position: relative; padding-top: 14px; touch-action: none; cursor: pointer; }
+.rail {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(238, 234, 244, 0.16);
+  overflow: hidden;
+}
+.fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.25s linear;
+}
 .times {
-  display: flex; justify-content: space-between;
-  margin-top: -6px;
-  color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
-.transport { display: flex; justify-content: space-around; align-items: center; }
+.transport { display: flex; align-items: center; justify-content: space-between; }
 .btn {
-  display: grid; place-items: center;
-  width: 64px; height: 64px;
-  border: 0; border-radius: 50%;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
+  transition: transform 0.3s var(--ease-spring), background 0.2s, color 0.3s;
 }
-.btn:active { background: var(--surface-2); }
-.btn svg { width: 30px; height: 30px; fill: currentColor; }
-.btn.play { background: var(--text); color: #000; }
+.btn:active { transform: scale(0.88); background: rgba(238, 234, 244, 0.08); }
+.btn svg { width: 28px; height: 28px; fill: currentColor; }
+.btn.play {
+  width: 76px;
+  height: 76px;
+  background: var(--ink);
+  color: #000;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+}
 .btn.play svg { width: 34px; height: 34px; }
-.btn.toggle { color: var(--muted); }
-.btn.toggle.on { color: var(--green); }
+body.playing .btn.play { animation: pulse 2.6s ease-out infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.btn.toggle { position: relative; color: var(--dim); }
+.btn.toggle svg { width: 24px; height: 24px; }
+.btn.toggle.on { color: var(--accent); }
+.btn.toggle::after {
+  content: '';
+  position: absolute;
+  bottom: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform 0.3s var(--ease-spring);
+}
+.btn.toggle.on::after { transform: scale(1); }
 
-.row { display: flex; align-items: center; gap: 6px; }
-.row input[type=range] { flex: 1; min-width: 0; height: 40px; accent-color: var(--text); }
+.volume { display: flex; align-items: center; gap: 12px; color: var(--dim); }
+.volume svg { width: 22px; height: 22px; fill: currentColor; flex: none; }
+.volume input {
+  --v: 50%;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.volume input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--ink) var(--v), rgba(238, 234, 244, 0.16) var(--v));
+}
+.volume input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
 
 /* ---------- Status ---------- */
 .overlay {
-  position: fixed; inset: 0;
-  display: grid; place-items: center;
-  background: rgba(0, 0, 0, 0.75);
-  color: var(--muted); font-size: 22px;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--dim);
+  font-size: 22px;
 }
 .dot {
-  position: fixed; right: 5px; bottom: 5px;
-  width: 7px; height: 7px; border-radius: 50%;
-  background: #b33;
+  position: fixed;
+  right: 5px;
+  bottom: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c44;
 }
-.dot.on { background: #2a6; opacity: 0.5; }
+.dot.on { background: #3a7; opacity: 0.45; }
 
-/* ---------- Portrait fallback ---------- */
+/* ---------- Portrait: music becomes a strip across the top ---------- */
 @media (orientation: portrait) {
-  .shell, .shell.no-spotify { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  :root { --panel: auto; }
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); row-gap: 14px; }
+  .shell.no-spotify { grid-template-columns: 1fr; grid-template-rows: 0px minmax(0, 1fr); row-gap: 0; }
   .spotify { order: -1; }
-  .sp-full { display: grid; grid-template-columns: 112px 1fr; column-gap: 16px; row-gap: 8px; align-items: center; }
-  .sp-full .art { grid-row: span 4; }
+  .sp-full {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    column-gap: 20px;
+    row-gap: 8px;
+    width: auto;
+  }
+  .art-wrap { grid-row: span 4; }
+  .spotify.idle .sp-idle { width: auto; }
+  .glow { left: 30%; top: 12%; }
+  .ambient {
+    -webkit-mask-image: radial-gradient(ellipse 90% 40% at 25% 12%, #000 0%, transparent 100%);
+    mask-image: radial-gradient(ellipse 90% 40% at 25% 12%, #000 0%, transparent 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 0.01s !important; }
 }
