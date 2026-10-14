@@ -96,6 +96,8 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 8. In *Settings → Battery*, exclude Mac Panel from battery optimisation, and keep the tablet on its charger.
 9. Fully Kiosk Browser is no longer needed; uninstall it if it's installed.
 
+**ADB over Wi-Fi** (no cable for later updates): with the cable in, run `adb tcpip 5555`, then `adb connect <tablet-ip>:5555`. After that, `./gradlew installDebug` works wirelessly. Android 7 forgets this on reboot, so after a restart it needs the cable once more. Other computers still need the tablet to approve their key.
+
 Updating the page needs no reinstall: the app loads it from the Mac. Only changes under `android/` need `./gradlew installDebug`.
 
 ### On-device checklist
