@@ -80,15 +80,24 @@ body.layer-open .stage { opacity: 0.12; }
 .card:active { transform: scale(0.96); }
 .card.focused { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--plate-hi)); }
 .card.minimized .ct { color: var(--dim); }
-.thumb {
-  width: 100%;
+.thumb-box {
+  position: relative;
+  display: block;
   height: 120px;
   margin-bottom: 4px;
+  overflow: hidden;
   border-radius: 10px;
-  object-fit: cover;
-  object-position: top;
   background: var(--void);
 }
+.thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.thumb.fresh { animation: shot-in 0.5s ease-out; }
 .card .flag { top: 14px; right: 14px; }
 .ct {
   display: -webkit-box;

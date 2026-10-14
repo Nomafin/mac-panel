@@ -1,5 +1,6 @@
 // The second layer: an app's windows as cards, in a sheet that grows out of the app's tile.
 import { esc } from './util.js';
+import { allWindowIds } from './shots.js';
 
 const CLOSE_MS = 620;
 const HOP_DELAY_MS = 560; // the tile hops as the sheet folds back into it
@@ -16,7 +17,6 @@ export function initSheet(ctx) {
   const grid = $('grid');
   let openApp = null; // bundleId shown in the sheet, if any
   let closeTimer = null;
-  let thumbStamp = 0; // a fresh preview each time the sheet opens
 
   // clip-path inset that crops the sheet down to exactly the tile's rectangle
   function insetFor(tile) {
@@ -45,15 +45,33 @@ export function initSheet(ctx) {
       if (win.minimized) cls.push('minimized');
       if (animate || !known.has(win.id)) cls.push('fan');
       const flag = ctx.windows.windowFlag(app, win);
-      // Previews need Screen Recording permission on the Mac; without it the image just goes away.
-      const thumb = !ctx.MOCK && !win.minimized && !win.otherSpace
-        ? `<img class="thumb" src="/thumb/${win.id}.jpg?t=${thumbStamp}" alt="" onerror="this.remove()">` : '';
+      // Previews (shared cache, needs Screen Recording on the Mac) fill a fixed frame, so cards don't jump.
+      const url = ctx.shots.url(win.id);
+      const thumb = capturable(win) ? `<span class="thumb-box">${url ? `<img class="thumb" src="${url}" alt="">` : ''}</span>` : '';
       return `<button class="${cls.join(' ')}" data-id="${win.id}" style="--i:${i}">
           ${thumb}
           <span class="ct">${esc(win.title)}</span>
           ${flag ? `<span class="flag">${flag}</span>` : ''}
         </button>`;
     }).join('');
+  }
+
+  // Minimized windows and windows on other Spaces can't be captured.
+  const capturable = (win) => !ctx.MOCK && !win.minimized && !win.otherSpace;
+
+  function fadeInThumb(id, url) {
+    const box = cards.querySelector(`.card[data-id="${id}"] .thumb-box`);
+    if (!box) return;
+    const old = box.querySelector('.thumb');
+    const img = new Image();
+    img.src = url;
+    img.className = 'thumb fresh';
+    img.alt = '';
+    box.appendChild(img); // on top of the old one
+    img.addEventListener('animationend', () => {
+      img.classList.remove('fresh');
+      if (old) old.remove();
+    }, { once: true });
   }
 
   function fitSheet() {
@@ -64,7 +82,6 @@ export function initSheet(ctx) {
   function open(bundleId) {
     const tile = ctx.windows.tileFor(bundleId);
     if (!tile) return;
-    thumbStamp = Date.now();
     clearTimeout(closeTimer);
     openApp = bundleId;
     sheetIcon.src = ctx.windows.iconUrl(bundleId);
@@ -72,6 +89,9 @@ export function initSheet(ctx) {
     layer.classList.remove('open', 'closing');
     fitSheet();
     renderCards(true);
+    // Fresh previews once per opening; redraws while open reuse them instead of capturing again.
+    ctx.shots.prune(allWindowIds(store));
+    ctx.shots.refresh(ctx.windows.findApp(bundleId).windows.filter(capturable).map((w) => w.id), fadeInThumb);
     // Start as the tile, then grow: clip-path and icon jump to the tile with no transition…
     sheet.classList.add('no-anim');
     sheet.style.clipPath = insetFor(tile);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fromMap, mapFit, toMap } from '../../tabletpanel/web/js/map.js';
+import { clampToScreens, fromMap, mapFit, toMap } from '../../tabletpanel/web/js/map.js';
 
 const SCREENS = [
   { id: 3, name: 'Odyssey', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
@@ -25,4 +25,12 @@ test('toMap and fromMap are inverses', () => {
   const r = toMap(frame, fit);
   assert.ok(near(r.left, 256) && near(r.top, fit.oy) && near(r.width, 256) && near(r.height, 213), JSON.stringify(r));
   assert.deepEqual(fromMap(r, fit), frame);
+});
+
+test('clampToScreens keeps a dragged frame on the screen it overlaps most, or the nearest', () => {
+  const inside = { x: -5000, y: 0, w: 2000, h: 1200 };
+  assert.deepEqual(clampToScreens(inside, SCREENS), inside);
+  assert.deepEqual(clampToScreens({ x: 2500, y: 1500, w: 1000, h: 800 }, SCREENS), { x: 1992, y: 1134, w: 1000, h: 800 });
+  assert.deepEqual(clampToScreens({ x: 9000, y: 100, w: 1000, h: 800 }, SCREENS), { x: 1992, y: 100, w: 1000, h: 800 });
+  assert.deepEqual(clampToScreens({ x: 0, y: 57, w: 5000, h: 5000 }, SCREENS), { x: 0, y: 57, w: 2992, h: 1877 });
 });

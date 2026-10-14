@@ -1,6 +1,7 @@
 // The screens map: the Mac's displays drawn to scale with live window screenshots. Drag to move,
 // drag the corner to resize, tap to focus; the preset buttons snap the selected window.
 import { esc, makeThrottle, shake } from './util.js';
+import { allWindowIds } from './shots.js';
 
 const SHOT_REFRESH_MS = 15000; // each capture briefly blocks Hammerspoon, so not too often
 const MOVE_THROTTLE_MS = 80;
@@ -33,6 +34,34 @@ export function fromMap(rect, fit) {
   };
 }
 
+function overlapArea(f, s) {
+  const w = Math.min(f.x + f.w, s.x + s.w) - Math.max(f.x, s.x);
+  const h = Math.min(f.y + f.h, s.y + s.h) - Math.max(f.y, s.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+// Keeps a dragged frame on a screen: onto the one it overlaps most (or the nearest), shrunk to
+// fit. The Mac applies the same rule (Layout.clamp in tabletpanel/layout_model.lua).
+export function clampToScreens(frame, screens) {
+  let best = null;
+  let bestOverlap = -1;
+  let bestDistance = Infinity;
+  for (const { frame: s } of screens) {
+    const o = overlapArea(frame, s);
+    const d = ((frame.x + frame.w / 2) - (s.x + s.w / 2)) ** 2 + ((frame.y + frame.h / 2) - (s.y + s.h / 2)) ** 2;
+    if (o > bestOverlap || (o === bestOverlap && d < bestDistance)) { best = s; bestOverlap = o; bestDistance = d; }
+  }
+  if (!best) return frame;
+  const w = Math.min(frame.w, best.w);
+  const h = Math.min(frame.h, best.h);
+  return {
+    x: Math.max(best.x, Math.min(frame.x, best.x + best.w - w)),
+    y: Math.max(best.y, Math.min(frame.y, best.y + best.h - h)),
+    w,
+    h,
+  };
+}
+
 // Layout presets (as in tabletpanel/layout_model.lua): id, label, left edge and width as fractions.
 const PRESETS = [
   ['left-third', 'Left ⅓', 0, 1 / 3], ['middle-third', 'Middle ⅓', 1 / 3, 1 / 3], ['right-third', 'Right ⅓', 2 / 3, 1 / 3],
@@ -49,39 +78,18 @@ export function initMap(ctx) {
   const mapTools = ctx.$('map-tools');
   const map = { fit: null, selected: null, drag: null };
 
-  // Window screenshots: each new one is downloaded and decoded off-screen, then crossfaded over the
-  // old one, so a refresh never shows an empty window. Kept as object URLs so redraws reuse them.
-  const shots = new Map(); // window id -> object URL of its latest screenshot
-  let shotsBusy = false;
-
-  async function refreshShots() {
-    if (ctx.MOCK || shotsBusy) return;
-    shotsBusy = true;
-    const ids = mapWindows().map((x) => x.w.id);
-    for (const id of ids) { // one at a time: each capture briefly blocks Hammerspoon
-      try {
-        const res = await fetch(`/thumb/${id}.jpg?t=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) continue; // no Screen Recording permission, or the window can't be captured
-        const url = URL.createObjectURL(await res.blob());
-        const img = new Image();
-        img.src = url;
-        await img.decode();
-        const old = shots.get(id);
-        shots.set(id, url);
-        fadeInShot(id, img);
-        if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
-      } catch (_) { /* keep the previous screenshot */ }
-    }
-    for (const [id, url] of shots) {
-      if (!ids.includes(id)) { URL.revokeObjectURL(url); shots.delete(id); }
-    }
-    shotsBusy = false;
+  // Screenshots come from the shared cache (shots.js): captured one at a time, crossfaded in.
+  function refreshShots() {
+    ctx.shots.prune(allWindowIds(ctx.store));
+    return ctx.shots.refresh(mapWindows().map((x) => x.w.id), fadeInShot);
   }
 
-  function fadeInShot(id, img) {
+  function fadeInShot(id, url) {
     const el = mapEl.querySelector(`.mwin[data-id="${id}"]`);
     if (!el) return;
     const old = el.querySelector('.mshot');
+    const img = new Image();
+    img.src = url;
     img.className = 'mshot fresh';
     img.alt = '';
     el.insertBefore(img, el.querySelector('.mwin-head')); // on top of the old one
@@ -118,7 +126,8 @@ export function initMap(ctx) {
         if (w.id === ctx.store.windows.focusedId) cls.push('focused');
         if (w.id === map.selected) cls.push('selected');
         // The window's live look (needs Screen Recording on the Mac; otherwise just the plain card).
-        const shot = shots.has(w.id) ? `<img class="mshot" src="${shots.get(w.id)}" alt="">` : '';
+        const url = ctx.shots.url(w.id);
+        const shot = url ? `<img class="mshot" src="${url}" alt="">` : '';
         return `<div class="${cls.join(' ')}" data-id="${w.id}" style="${px(toMap(w.frame, map.fit))}">
             ${shot}
             <div class="mwin-head"><img src="${esc(ctx.windows.iconUrl(app.bundleId))}" alt=""><span>${esc(w.title)}</span></div>
@@ -160,9 +169,11 @@ export function initMap(ctx) {
       r.left += dx;
       r.top += dy;
     }
-    Object.assign(d.el.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
-    d.rect = r;
-    sendMove(d.id, fromMap(r, map.fit));
+    const frame = clampToScreens(fromMap(r, map.fit), ctx.store.windows.screens); // stops at the screen edge
+    const shown = toMap(frame, map.fit);
+    Object.assign(d.el.style, { left: shown.left + 'px', top: shown.top + 'px', width: shown.width + 'px', height: shown.height + 'px' });
+    d.frame = frame;
+    sendMove(d.id, frame);
   });
 
   function endDrag() {
@@ -171,8 +182,8 @@ export function initMap(ctx) {
     map.drag = null;
     if (!d.moved) {
       ctx.windows.focusWindow(d.id, () => mapEl.querySelector(`.mwin[data-id="${d.id}"]`));
-    } else if (d.rect) {
-      ctx.send('windows.move', { id: d.id, ...fromMap(d.rect, map.fit) });
+    } else if (d.frame) {
+      ctx.send('windows.move', { id: d.id, ...d.frame }).then((r) => { if (!r.ok) shake(d.el); });
     }
     setTimeout(renderMap, 150); // let the Mac's update catch up before redrawing
     if (d.moved) setTimeout(refreshShots, 400); // the window redraws at its new size

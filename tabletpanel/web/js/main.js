@@ -16,6 +16,7 @@ import { initMap } from './map.js';
 import { initPad } from './pad.js';
 import { initPages } from './pages.js';
 import { initKeys } from './keys.js';
+import { browserShots } from './shots.js';
 
 const params = new URLSearchParams(location.search);
 const listeners = {};
@@ -30,6 +31,7 @@ const ctx = {
   emit(event) { (listeners[event] || []).forEach((fn) => fn()); },
 };
 
+ctx.shots = browserShots(ctx.MOCK);
 ctx.connection = initConnection(ctx);
 ctx.send = ctx.connection.send;
 ctx.windows = initWindows(ctx);

@@ -129,13 +129,20 @@ function W.actions.focus(args)
   return true
 end
 
--- Moves/resizes a window to a frame in screen coordinates (dragged on the map page).
+local function screenFrames()
+  local out = {}
+  for _, screen in ipairs(hs.screen.allScreens()) do out[#out + 1] = { frame = screen:frame() } end
+  return out
+end
+
+-- Moves/resizes a window to a frame in screen coordinates (dragged on the map page), kept on a screen.
 function W.actions.move(args)
   local win = findWindow(tonumber(args.id))
   if not win then return false, 'not_found' end
-  local x, y, w, h = tonumber(args.x), tonumber(args.y), tonumber(args.w), tonumber(args.h)
-  if not (x and y and w and h) or w < 50 or h < 50 then return false, 'bad_frame' end
-  win:setFrame({ x = x, y = y, w = w, h = h }, 0)
+  local frame = Layout.clamp({ x = tonumber(args.x), y = tonumber(args.y), w = tonumber(args.w), h = tonumber(args.h) },
+    screenFrames())
+  if not frame then return false, 'bad_frame' end
+  win:setFrame(frame, 0)
   return true
 end
 
@@ -143,11 +150,13 @@ end
 function W.actions.layout(args)
   local win = findWindow(tonumber(args.id))
   if not win then return false, 'not_found' end
+  -- A window that is somehow off every screen has no screen; snap it onto the main one.
+  local screen = win:screen() or hs.screen.mainScreen()
   if args.preset == 'other-screen' then
-    win:moveToScreen(win:screen():next(), false, true, 0)
+    win:moveToScreen(screen:next(), false, true, 0)
     return true
   end
-  local frame = Layout.frame(args.preset, win:screen():frame())
+  local frame = Layout.frame(args.preset, screen:frame())
   if not frame then return false, 'unknown_preset' end
   win:setFrame(frame, 0)
   return true
