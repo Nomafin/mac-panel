@@ -142,6 +142,7 @@ body.layer-open .page-dots { opacity: 0; pointer-events: none; }
 .mscreen span { position: absolute; bottom: calc(100% + 6px); left: 2px; color: var(--dim); font-size: 13px; white-space: nowrap; }
 .mwin {
   position: absolute;
+  isolation: isolate; /* keep each window's layers (shot, title, grip) inside it */
   overflow: hidden;
   border-radius: 6px;
   background: var(--plate-hi);
@@ -149,11 +150,28 @@ body.layer-open .page-dots { opacity: 0; pointer-events: none; }
 }
 .mwin.focused { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent); }
 .mwin.selected { z-index: 1; box-shadow: inset 0 0 0 2px var(--accent), 0 10px 30px -8px rgba(0, 0, 0, 0.9); }
-.mwin-head { display: flex; align-items: center; gap: 5px; padding: 5px 6px; }
+.mshot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  pointer-events: none;
+}
+.mwin-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px 10px;
+  background: linear-gradient(rgba(10, 10, 14, 0.85), rgba(10, 10, 14, 0));
+}
 .mwin-head img { flex: none; width: 18px; height: 18px; }
 .mwin-head span { overflow: hidden; color: var(--ink); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
 .grip {
   position: absolute;
+  z-index: 1;
   right: 0;
   bottom: 0;
   width: 26px;

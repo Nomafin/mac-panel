@@ -1122,7 +1122,7 @@ function boot() {
     pagesEl.style.transform = `translateX(${-currentPage * 100}vw)`;
     dotsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === currentPage));
     if (currentPage !== 0 && openApp) closeLayer();
-    if (currentPage === 1) renderMap();
+    if (currentPage === 1) refreshShots();
     if (currentPage === 2) sizePad();
   }
 
@@ -1160,7 +1160,14 @@ function boot() {
 
   const mapEl = $('map');
   const mapTools = $('map-tools');
-  const map = { fit: null, selected: null, drag: null };
+  const map = { fit: null, selected: null, drag: null, shotStamp: 0 };
+  const SHOT_REFRESH_MS = 15000; // each capture briefly blocks Hammerspoon, so not too often
+
+  function refreshShots() {
+    map.shotStamp = Date.now();
+    renderMap();
+  }
+  setInterval(() => { if (currentPage === 1 && !sleep.asleep) refreshShots(); }, SHOT_REFRESH_MS);
   const PRESETS = [
     ['left-third', 'Left ⅓', 0, 1 / 3], ['middle-third', 'Middle ⅓', 1 / 3, 1 / 3], ['right-third', 'Right ⅓', 2 / 3, 1 / 3],
     ['left-half', 'Left ½', 0, 0.5], ['right-half', 'Right ½', 0.5, 0.5], ['center', 'Centre', 1 / 6, 2 / 3],
@@ -1196,7 +1203,10 @@ function boot() {
         const cls = ['mwin'];
         if (w.id === store.windows.focusedId) cls.push('focused');
         if (w.id === map.selected) cls.push('selected');
+        // The window's live look (needs Screen Recording on the Mac; otherwise just the plain card).
+        const shot = MOCK ? '' : `<img class="mshot" src="/thumb/${w.id}.jpg?t=${map.shotStamp}" alt="" onerror="this.remove()">`;
         return `<div class="${cls.join(' ')}" data-id="${w.id}" style="${px(toMap(w.frame, map.fit))}">
+            ${shot}
             <div class="mwin-head"><img src="${esc(iconUrl(app.bundleId))}" alt=""><span>${esc(w.title)}</span></div>
             <div class="grip"></div>
           </div>`;
@@ -1250,7 +1260,7 @@ function boot() {
     } else if (d.rect) {
       send('windows.move', { id: d.id, ...fromMap(d.rect, map.fit) });
     }
-    setTimeout(renderMap, 150); // let the Mac's update catch up before redrawing
+    setTimeout(d.moved ? refreshShots : renderMap, d.moved ? 400 : 150); // let the Mac catch up first
   }
   mapEl.addEventListener('pointerup', endDrag);
   mapEl.addEventListener('pointercancel', endDrag);
@@ -1258,7 +1268,10 @@ function boot() {
   mapTools.addEventListener('click', (e) => {
     const b = e.target.closest('.preset');
     if (!b || !map.selected) return;
-    send('windows.layout', { id: map.selected, preset: b.dataset.preset }).then((r) => { if (!r.ok) shake(b); });
+    send('windows.layout', { id: map.selected, preset: b.dataset.preset }).then((r) => {
+      if (!r.ok) shake(b);
+      else setTimeout(refreshShots, 400); // the window redraws at its new size
+    });
   });
 
   const renderWindowsOnly = renderers.windows;
