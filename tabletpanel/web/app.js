@@ -129,6 +129,37 @@ function keyAction(key, { layerOpen, asleep }) {
   return null;
 }
 
+const TREND_WINDOW_MS = 30 * 60000;
+const TREND_MIN_SPAN_MS = 10 * 60000;
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function formatClock(d) {
+  return {
+    time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+    date: `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`,
+  };
+}
+
+// Whether the battery level really rose or fell recently. Android's "charging" can't tell a charger
+// that barely keeps up from one that charges. samples: [{t, level}], oldest first.
+function batteryTrend(samples, now) {
+  const recent = samples.filter((s) => now - s.t <= TREND_WINDOW_MS);
+  if (recent.length < 2) return null;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  if (last.t - first.t < TREND_MIN_SPAN_MS) return null;
+  if (last.level > first.level) return 'up';
+  if (last.level < first.level) return 'down';
+  return 'flat';
+}
+
+function batteryTone({ level, plugged }, trend) {
+  if (plugged && trend === 'down') return 'warn';
+  if (!plugged && level < 20) return 'low';
+  return '';
+}
+
 /* ---------- Mock mode (?mock, ?mock=idle, ?mock=nospotify) ---------- */
 
 function mockArt(h1, h2) {
@@ -458,7 +489,9 @@ function boot() {
     lamp.classList.add('lit');
   }
   // Tiles move when the music column slides in/out or the web font arrives; follow them.
-  new ResizeObserver(() => placeLamp()).observe(grid);
+  const lampWatch = new ResizeObserver(() => placeLamp());
+  lampWatch.observe(grid);
+  lampWatch.observe($('clock')); // the clock sits above the grid; its height moves the tiles
 
   function shake(el) {
     if (!el) return;
@@ -836,6 +869,50 @@ function boot() {
     shell.style.translate = `${x}px ${y}px`;
   }, SHIFT_MS);
 
+  /* ----- clock and the tablet's battery ----- */
+
+  const timeEl = $('clock-time');
+  const dateEl = $('clock-date');
+  const battEl = $('battery');
+  const battery = { samples: [], plugged: null };
+
+  function tickClock() {
+    const { time, date } = formatClock(new Date());
+    if (timeEl.textContent !== time) timeEl.textContent = time;
+    if (dateEl.textContent !== date) dateEl.textContent = date;
+  }
+
+  // Only the tablet app can read the battery; a desktop browser shows no indicator.
+  function readBattery() {
+    if (window.TabletApp && window.TabletApp.battery) {
+      try { return JSON.parse(window.TabletApp.battery()); } catch (_) { return null; }
+    }
+    return MOCK ? { level: 72, plugged: true } : null;
+  }
+
+  function tickBattery() {
+    const b = readBattery();
+    battEl.hidden = !b;
+    if (!b) return;
+    const now = Date.now();
+    if (b.plugged !== battery.plugged) battery.samples = []; // a new charging session, a new trend
+    battery.plugged = b.plugged;
+    battery.samples.push({ t: now, level: b.level });
+    battery.samples = battery.samples.filter((s) => now - s.t <= TREND_WINDOW_MS);
+    const trend = b.plugged ? batteryTrend(battery.samples, now) : null;
+    battEl.className = ('battery ' + batteryTone(b, trend)).trim();
+    battEl.style.setProperty('--level', b.level / 100);
+    battEl.querySelector('.pct').textContent = b.level + '%';
+    battEl.querySelector('.trend').textContent = trend === 'up' ? '▴' : trend === 'down' ? '▾' : '';
+    battEl.title = !b.plugged ? 'Tablet battery' : trend === 'down' ? 'Falling on the charger'
+      : trend === 'up' ? 'Charging' : 'On the charger';
+  }
+
+  tickClock();
+  setInterval(tickClock, 1000);
+  tickBattery();
+  setInterval(tickBattery, 60000);
+
   console.log('tabletpanel UA:', navigator.userAgent);
   renderWindows();
   connect();
@@ -844,7 +921,7 @@ function boot() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector,
-    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction,
+    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction, formatClock, batteryTrend, batteryTone,
   };
 }
 if (typeof document !== 'undefined') boot();

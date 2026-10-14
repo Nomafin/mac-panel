@@ -111,6 +111,48 @@ body.playing .glow { animation-play-state: running; }
   padding-top: 11px; /* room for the card stacks */
 }
 
+/* ---------- Clock and the tablet's battery ---------- */
+.clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 30px;
+  font-variant-numeric: tabular-nums;
+}
+.clock-time { font-size: 52px; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
+.clock-date { font-size: 19px; color: var(--dim); }
+.battery { display: inline-flex; align-items: center; gap: 7px; font-size: 15px; color: var(--dim); }
+.battery[hidden] { display: none; }
+.batt-icon {
+  position: relative;
+  width: 22px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.batt-icon::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  right: -4px;
+  width: 2px;
+  height: 3px;
+  border-radius: 0 1px 1px 0;
+  background: currentColor;
+}
+.batt-icon i {
+  position: absolute;
+  inset: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleX(var(--level, 1));
+  transform-origin: left;
+}
+.trend { font-size: 13px; }
+.battery.warn { color: #e3a857; }
+.battery.low { color: #e36a5f; }
+
 .tile {
   position: relative;
   display: grid;

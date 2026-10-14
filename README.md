@@ -62,6 +62,7 @@ Unit tests: `/opt/homebrew/opt/lua@5.4/bin/lua tests/run.lua` (`brew install lua
 - Each key reaches the page as a `tablet-key` event (`back`, `home`, `recents`, `volumeup`, `volumedown`), so giving a key a job is a page change in `web/app.js` (`keyAction`).
 - The screen goes black when the Mac's display sleeps, the Mac locks or its screensaver starts. It also goes black after 30 s without a connection, e.g. when the Mac is fully asleep. It comes back when the Mac wakes. Tapping the black screen shows the panel for 60 s.
 - **Escape menu**: hold Back for about 1.5 seconds. It has *Reload*, *Mac address…*, *Android settings* and *Choose home app* (to go back to the Samsung launcher).
+- Above the window grid: a clock, the date and the tablet's battery. While on the charger, ▴ or ▾ shows whether the level actually rose or fell over the last 30 minutes (after ~10 minutes of history); the indicator turns amber if it's falling on the charger, which means the charger can't keep up.
 - If the Mac can't be reached when the app starts, it shows *Waiting for your Mac…* and retries every 5 s.
 
 ### Build

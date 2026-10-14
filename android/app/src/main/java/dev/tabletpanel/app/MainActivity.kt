@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -187,6 +188,18 @@ class MainActivity : Activity() {
         /** Dark = minimum brightness; the page draws black on top, so the AMOLED pixels are off. */
         @JavascriptInterface
         fun setScreen(on: Boolean) = runOnUiThread { setBrightness(on) }
+
+        /** `{"level":66,"plugged":true}` as a JSON string, or "null". */
+        @JavascriptInterface
+        fun battery(): String {
+            // A sticky broadcast: registering with no receiver just returns the latest value.
+            val status = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return "null"
+            return Battery.json(
+                level = status.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+                scale = status.getIntExtra(BatteryManager.EXTRA_SCALE, -1),
+                plugged = status.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0),
+            )
+        }
     }
 
     /* ----- hardware keys ----- */
