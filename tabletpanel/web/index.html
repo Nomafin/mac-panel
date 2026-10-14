@@ -15,6 +15,8 @@
     <div class="glow" id="glow-a"></div>
     <div class="glow" id="glow-b"></div>
   </div>
+  <div id="pages" class="pages">
+  <div class="page">
   <div id="shell" class="shell no-spotify">
     <main id="windows" class="windows">
       <div id="stage" class="stage">
@@ -29,10 +31,32 @@
         <div id="lamp" class="lamp" aria-hidden="true"></div>
         <div id="grid" class="grid"></div>
       </div>
+      <nav id="actions" class="actions" aria-label="Shortcuts for the front app"></nav>
       <footer id="macstat" class="macstat"></footer>
     </main>
     <aside id="spotify" class="spotify"></aside>
   </div>
+  </div>
+  <section id="map-page" class="page map-page" aria-label="Screens">
+    <div id="map" class="map"></div>
+    <div id="map-tools" class="map-tools"></div>
+  </section>
+  <section id="pad-page" class="page pad-page" aria-label="Sketch pad">
+    <canvas id="pad" class="pad"></canvas>
+    <p id="pad-hint" class="pad-hint">Draw or sign with your finger, then copy it to the Mac's clipboard.</p>
+    <div class="pad-tools">
+      <button id="pad-undo" class="pad-btn">Undo</button>
+      <button id="pad-clear" class="pad-btn">Clear</button>
+      <button id="pad-copy" class="pad-btn primary">Copy to Mac</button>
+    </div>
+    <div id="pad-toast" class="pad-toast" hidden></div>
+  </section>
+  </div>
+  <nav id="page-dots" class="page-dots" aria-label="Pages">
+    <button data-page="0" aria-label="Panel"></button>
+    <button data-page="1" aria-label="Screens"></button>
+    <button data-page="2" aria-label="Sketch pad"></button>
+  </nav>
   <div id="layer" class="layer" hidden>
     <div id="layer-backdrop" class="layer-backdrop"></div>
     <section id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">

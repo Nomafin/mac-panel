@@ -2,6 +2,7 @@
 -- Like the Dock, it also lists the Dock's pinned apps and running apps without windows.
 local Model = require('tabletpanel.windows_model')
 local Dock = require('tabletpanel.dock_model')
+local Layout = require('tabletpanel.layout_model')
 
 local W = { name = 'windows', actions = {} }
 
@@ -9,7 +10,7 @@ local wf = hs.window.filter
 local EVENTS = {
   wf.windowCreated, wf.windowDestroyed, wf.windowTitleChanged, wf.windowFocused,
   wf.windowMinimized, wf.windowUnminimized, wf.windowHidden, wf.windowUnhidden,
-  wf.windowInCurrentSpace, wf.windowNotInCurrentSpace, wf.windowsChanged,
+  wf.windowInCurrentSpace, wf.windowNotInCurrentSpace, wf.windowsChanged, wf.windowMoved,
 }
 local DEBOUNCE_SECONDS = 0.05
 
@@ -66,12 +67,22 @@ function W.stop()
   if dockWatcher then dockWatcher:stop(); dockWatcher = nil end
 end
 
+local function roundFrame(f)
+  return { x = math.floor(f.x + 0.5), y = math.floor(f.y + 0.5), w = math.floor(f.w + 0.5), h = math.floor(f.h + 0.5) }
+end
+
 function W.state()
   if not allFilter then return Model.new():build({}, nil) end
   local onSpace = {}
   for _, w in ipairs(spaceFilter:getWindows()) do
     local id = w:id()
     if id then onSpace[id] = true end
+  end
+  -- Front-to-back rank of the visible windows, so the map can stack them like the screen does.
+  local zOf = {}
+  for i, w in ipairs(hs.window.orderedWindows()) do
+    local id = w:id()
+    if id then zOf[id] = i end
   end
   local raw = {}
   for _, w in ipairs(allFilter:getWindows()) do
@@ -81,6 +92,7 @@ function W.state()
         id = id, title = w:title(), bundleId = app:bundleID(), appName = app:name(),
         appHidden = app:isHidden(), minimized = w:isMinimized(),
         onCurrentSpace = onSpace[id] == true, standard = w:isStandard(),
+        frame = roundFrame(w:frame()), z = zOf[id],
       }
     end
   end
@@ -92,8 +104,12 @@ function W.state()
       running[#running + 1] = { bundleId = bid, name = app:name(), hidden = app:isHidden() }
     end
   end
+  local screens = {}
+  for _, screen in ipairs(hs.screen.allScreens()) do
+    screens[#screens + 1] = { id = screen:id(), name = screen:name(), frame = roundFrame(screen:frame()) }
+  end
   local focused = hs.window.focusedWindow()
-  return model:build(raw, focused and focused:id() or nil, { pins = pins, running = running })
+  return model:build(raw, focused and focused:id() or nil, { pins = pins, running = running, screens = screens })
 end
 
 local function findWindow(id)
@@ -110,6 +126,30 @@ function W.actions.focus(args)
   if app and app:isHidden() then app:unhide() end
   if win:isMinimized() then win:unminimize() end
   win:focus() -- macOS switches Space if the window lives on another one (best effort)
+  return true
+end
+
+-- Moves/resizes a window to a frame in screen coordinates (dragged on the map page).
+function W.actions.move(args)
+  local win = findWindow(tonumber(args.id))
+  if not win then return false, 'not_found' end
+  local x, y, w, h = tonumber(args.x), tonumber(args.y), tonumber(args.w), tonumber(args.h)
+  if not (x and y and w and h) or w < 50 or h < 50 then return false, 'bad_frame' end
+  win:setFrame({ x = x, y = y, w = w, h = h }, 0)
+  return true
+end
+
+-- Snaps a window to a layout preset on its screen, or moves it to the other screen ('other-screen').
+function W.actions.layout(args)
+  local win = findWindow(tonumber(args.id))
+  if not win then return false, 'not_found' end
+  if args.preset == 'other-screen' then
+    win:moveToScreen(win:screen():next(), false, true, 0)
+    return true
+  end
+  local frame = Layout.frame(args.preset, win:screen():frame())
+  if not frame then return false, 'unknown_preset' end
+  win:setFrame(frame, 0)
   return true
 end
 

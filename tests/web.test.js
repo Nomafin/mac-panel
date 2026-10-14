@@ -210,3 +210,47 @@ test('macStats formats CPU, memory and the MacBook battery', () => {
   assert.deepEqual(h.macStats({ cpu: 5, memory: 40 }), { parts: ['CPU 5%', 'Memory 40%'], low: false });
   assert.deepEqual(h.macStats(null), { parts: [], low: false });
 });
+
+const SCREENS = [
+  { id: 3, name: 'Odyssey', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
+  { id: 1, name: 'Built-in', frame: { x: 0, y: 57, w: 2992, h: 1877 } },
+];
+
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+
+test('mapFit scales all screens into the box and centres them', () => {
+  const fit = h.mapFit(SCREENS, 1067.2, 600);
+  // bounding box 10672 x 2219 (y -285 .. 1934): width-limited
+  assert.ok(near(fit.scale, 0.1), 'scale ' + fit.scale);
+  assert.equal(fit.minX, -7680);
+  assert.equal(fit.minY, -285);
+  assert.ok(near(fit.ox, 0));
+  assert.ok(near(fit.oy, (600 - 221.9) / 2));
+});
+
+test('toMap and fromMap are inverses', () => {
+  const fit = h.mapFit(SCREENS, 1067.2, 600);
+  const frame = { x: -5120, y: -285, w: 2560, h: 2130 };
+  const r = h.toMap(frame, fit);
+  assert.ok(near(r.left, 256) && near(r.top, fit.oy) && near(r.width, 256) && near(r.height, 213), JSON.stringify(r));
+  assert.deepEqual(h.fromMap(r, fit), frame);
+});
+
+test('swipeDirection needs a long, mostly horizontal swipe', () => {
+  assert.equal(h.swipeDirection(-120, 10), 1); // finger moves left: next page
+  assert.equal(h.swipeDirection(120, -20), -1);
+  assert.equal(h.swipeDirection(-50, 0), 0);
+  assert.equal(h.swipeDirection(-120, 90), 0);
+});
+
+test('keyAction: Back returns to the panel from the other pages', () => {
+  assert.equal(h.keyAction('back', { layerOpen: false, asleep: false, page: 1 }), 'panel');
+  assert.equal(h.keyAction('back', { layerOpen: true, asleep: false, page: 0 }), 'closeLayer');
+  assert.equal(h.keyAction('back', { layerOpen: false, asleep: false, page: 0 }), null);
+});
+
+test('strokeBounds finds the drawing with a margin, or null when empty', () => {
+  assert.deepEqual(h.strokeBounds([[{ x: 10, y: 20 }, { x: 50, y: 25 }], [{ x: 30, y: 60 }]], 5),
+    { x: 5, y: 15, w: 50, h: 50 });
+  assert.equal(h.strokeBounds([], 5), null);
+});

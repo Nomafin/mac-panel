@@ -18,7 +18,8 @@ local function seqFor(self, map, key)
 end
 
 -- raw: array of { id, title, bundleId, appName, appHidden, minimized, onCurrentSpace, standard }
--- dock (optional): { pins = { {bundleId, name} } in Dock order, running = { {bundleId, name, hidden} } }
+-- dock (optional): { pins = { {bundleId, name} } in Dock order, running = { {bundleId, name, hidden} },
+--                   screens = { {id, name, frame} } }
 -- Like the Dock: pinned apps first in pin order (running or not), then other apps in first-seen order.
 function Model:build(raw, focusedId, dock)
   dock = dock or {}
@@ -57,6 +58,7 @@ function Model:build(raw, focusedId, dock)
       app.windows[#app.windows + 1] = {
         id = w.id, title = w.title, minimized = w.minimized == true,
         otherSpace = not w.minimized and not w.appHidden and not w.onCurrentSpace,
+        frame = w.frame, z = w.z, -- for the map page
         _seq = seqFor(self, self.winSeq, w.id),
       }
     end
@@ -81,7 +83,7 @@ function Model:build(raw, focusedId, dock)
     app._seq = nil
   end
 
-  return { focusedId = focusedId, apps = json.array(appList) }
+  return { focusedId = focusedId, apps = json.array(appList), screens = dock.screens and json.array(dock.screens) }
 end
 
 return Model

@@ -84,8 +84,151 @@ body.playing .glow { animation-play-state: running; }
   grid-template-columns: minmax(0, 1fr) var(--panel);
   column-gap: 20px;
   height: 100vh;
-  padding: 14px 14px 14px 16px;
+  padding: 14px 14px 26px 16px; /* bottom: room for the page dots */
   transition: grid-template-columns 0.7s var(--ease-out), translate 1s;
+}
+
+/* ---------- Pages: panel, screens map, sketch pad ---------- */
+.pages {
+  display: flex;
+  width: 300vw;
+  height: 100vh;
+  touch-action: pan-y; /* horizontal moves stay with us, for the page swipe */
+  transition: transform 0.5s var(--ease-sheet);
+}
+.page { position: relative; flex: none; width: 100vw; height: 100vh; overflow: hidden; }
+.page-dots {
+  position: fixed;
+  bottom: 4px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  transform: translateX(-50%);
+}
+.page-dots button {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.page-dots button::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: auto;
+  border-radius: 3px;
+  background: var(--dim);
+  opacity: 0.45;
+  transition: width 0.3s var(--ease-out), opacity 0.3s, background 0.3s;
+}
+.page-dots button.on::before { width: 18px; opacity: 1; background: var(--ink); }
+body.layer-open .page-dots { opacity: 0; pointer-events: none; }
+
+/* ---------- Map page ---------- */
+.map-page { display: flex; flex-direction: column; padding: 22px 18px 34px; touch-action: none; }
+.map { position: relative; flex: 1; }
+.mscreen {
+  position: absolute;
+  border-radius: 10px;
+  background: #0d0e12;
+  box-shadow: inset 0 0 0 1px rgba(238, 234, 244, 0.08);
+}
+.mscreen span { position: absolute; bottom: calc(100% + 6px); left: 2px; color: var(--dim); font-size: 13px; white-space: nowrap; }
+.mwin {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--plate-hi);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 6px 18px -6px rgba(0, 0, 0, 0.8);
+}
+.mwin.focused { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent); }
+.mwin.selected { z-index: 1; box-shadow: inset 0 0 0 2px var(--accent), 0 10px 30px -8px rgba(0, 0, 0, 0.9); }
+.mwin-head { display: flex; align-items: center; gap: 5px; padding: 5px 6px; }
+.mwin-head img { flex: none; width: 18px; height: 18px; }
+.mwin-head span { overflow: hidden; color: var(--ink); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  border-bottom-right-radius: 6px;
+  background: linear-gradient(135deg, transparent 50%, rgba(238, 234, 244, 0.35) 50%);
+}
+.map-tools {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 14px;
+  opacity: 0.25;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.map-tools.on { opacity: 1; pointer-events: auto; }
+.preset {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 92px;
+  padding: 10px 4px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--plate);
+  color: var(--dim);
+  font-size: 12px;
+  transition: transform 0.2s var(--ease-spring), background 0.2s;
+}
+.preset:active { transform: scale(0.92); background: var(--plate-hi); }
+.preset svg { width: 64px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.preset svg .zone { fill: var(--accent); stroke: none; opacity: 0.85; }
+
+/* ---------- Sketch pad ---------- */
+.pad-page { touch-action: none; }
+.pad { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pad-hint {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  color: var(--dim);
+  font-size: 20px;
+  text-align: center;
+  pointer-events: none;
+}
+.pad-tools { position: absolute; top: 16px; right: 16px; display: flex; gap: 8px; }
+.pad-btn {
+  height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--plate-hi);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  transition: transform 0.2s var(--ease-spring);
+}
+.pad-btn:active { transform: scale(0.94); }
+.pad-btn.primary { background: var(--accent); color: #0b0b10; font-weight: 600; }
+.pad-toast {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  padding: 10px 18px;
+  border-radius: 20px;
+  background: var(--plate-hi);
+  color: var(--ink);
+  transform: translateX(-50%);
+  opacity: 0;
+}
+.pad-toast.show { animation: toast 2.4s var(--ease-out); }
+@keyframes toast {
+  0% { opacity: 0; transform: translate(-50%, 10px); }
+  12%, 80% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; }
 }
 .shell.no-spotify { grid-template-columns: minmax(0, 1fr) 0px; column-gap: 0; }
 
@@ -174,6 +317,22 @@ body.playing .glow { animation-play-state: running; }
 .mic .slash { opacity: 0; transition: opacity 0.2s; }
 .mic.muted { background: #c8423b; color: #fff; }
 .mic.muted .slash { opacity: 1; }
+
+/* Buttons for the Mac's front app. */
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 12px; }
+.actions:empty { display: none; }
+.action {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--plate);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  transition: transform 0.2s var(--ease-spring), background 0.2s;
+}
+.action:active { transform: scale(0.93); background: var(--plate-hi); }
 
 /* The Mac's CPU, memory and battery, quietly along the bottom of the grid column. */
 .macstat {

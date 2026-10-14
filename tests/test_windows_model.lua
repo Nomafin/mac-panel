@@ -134,4 +134,12 @@ return function(T)
     local dock = { pins = { { bundleId = 'p.One', name = 'One' }, { bundleId = 'p.One', name = 'One' } } }
     T.eq(bids(Model.new():build({}, nil, dock)), { 'p.One' })
   end)
+
+  T.test('passes window frames, stacking order and screens through for the map', function()
+    local s = Model.new():build({ win(1, 'a.A', 'x', { frame = { x = 10, y = 20, w = 300, h = 200 }, z = 2 }) }, nil,
+      { screens = { { id = 1, name = 'Odyssey', frame = { x = 0, y = 0, w = 7680, h = 2130 } } } })
+    T.eq(s.apps[1].windows[1].frame, { x = 10, y = 20, w = 300, h = 200 })
+    T.eq(s.apps[1].windows[1].z, 2)
+    T.eq(s.screens, { { id = 1, name = 'Odyssey', frame = { x = 0, y = 0, w = 7680, h = 2130 } } })
+  end)
 end

@@ -123,9 +123,10 @@ function shouldSleep({ macAwake, connected, disconnectedSince, peekUntil, now })
 }
 
 // What a hardware key does. Volume keys never wake the screen: the cover can hold them down.
-function keyAction(key, { layerOpen, asleep, micInUse }) {
+function keyAction(key, { layerOpen, asleep, micInUse, page = 0 }) {
   if (asleep) return key === 'back' || key === 'home' || key === 'recents' ? 'peek' : null;
   if (key === 'back' && layerOpen) return 'closeLayer';
+  if (key === 'back' && page !== 0) return 'panel';
   if (key === 'recents' && micInUse) return 'toggleMic'; // a physical mute key during calls
   return null;
 }
@@ -195,6 +196,53 @@ function tileAction(app) {
   return app.windows.length === 1 ? 'focus' : 'sheet';
 }
 
+/* ----- map page: the Mac's screens drawn to scale ----- */
+
+// Fits the bounding box of all screens into width × height, centred.
+function mapFit(screens, width, height) {
+  const minX = Math.min(...screens.map((s) => s.frame.x));
+  const minY = Math.min(...screens.map((s) => s.frame.y));
+  const maxX = Math.max(...screens.map((s) => s.frame.x + s.frame.w));
+  const maxY = Math.max(...screens.map((s) => s.frame.y + s.frame.h));
+  const scale = Math.min(width / (maxX - minX), height / (maxY - minY));
+  return { scale, minX, minY, ox: (width - (maxX - minX) * scale) / 2, oy: (height - (maxY - minY) * scale) / 2 };
+}
+
+function toMap(frame, fit) {
+  return {
+    left: (frame.x - fit.minX) * fit.scale + fit.ox,
+    top: (frame.y - fit.minY) * fit.scale + fit.oy,
+    width: frame.w * fit.scale,
+    height: frame.h * fit.scale,
+  };
+}
+
+function fromMap(rect, fit) {
+  return {
+    x: Math.round((rect.left - fit.ox) / fit.scale + fit.minX),
+    y: Math.round((rect.top - fit.oy) / fit.scale + fit.minY),
+    w: Math.round(rect.width / fit.scale),
+    h: Math.round(rect.height / fit.scale),
+  };
+}
+
+// Page swipe: 1 = next page (finger moved left), -1 = previous, 0 = not a swipe.
+function swipeDirection(dx, dy) {
+  if (Math.abs(dx) < 80 || Math.abs(dx) < 2 * Math.abs(dy)) return 0;
+  return dx < 0 ? 1 : -1;
+}
+
+// The drawn area plus a margin, in the pad's coordinates; null when nothing is drawn.
+function strokeBounds(strokes, margin) {
+  const points = strokes.flat();
+  if (!points.length) return null;
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const x = Math.min(...xs) - margin;
+  const y = Math.min(...ys) - margin;
+  return { x, y, w: Math.max(...xs) + margin - x, h: Math.max(...ys) + margin - y };
+}
+
 /* ---------- Mock mode (?mock, ?mock=idle, ?mock=nospotify) ---------- */
 
 function mockArt(h1, h2) {
@@ -214,28 +262,35 @@ function mockState(variant) {
   return {
     windows: {
       focusedId: 11,
+      screens: [
+        { id: 3, name: 'Odyssey G95NC', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
+        { id: 1, name: 'Built-in Display', frame: { x: 0, y: 57, w: 2992, h: 1877 } },
+      ],
       apps: [
         { bundleId: 'com.apple.finder', name: 'Finder', hidden: false, running: true, pinned: true, windows: [] },
         { bundleId: 'com.apple.Safari', name: 'Safari', hidden: false, running: true, pinned: true, windows: [
-          { id: 11, title: 'GitHub – Pull requests', minimized: false, otherSpace: false },
-          { id: 12, title: 'Hammerspoon docs: hs.window.filter', minimized: false, otherSpace: false },
+          { id: 11, title: 'GitHub – Pull requests', minimized: false, otherSpace: false, frame: { x: -7680, y: -260, w: 2560, h: 2105 }, z: 1 },
+          { id: 12, title: 'Hammerspoon docs: hs.window.filter', minimized: false, otherSpace: false, frame: { x: -4600, y: 200, w: 1800, h: 1200 }, z: 3 },
           { id: 13, title: 'A very long window title that should be clamped to two lines on the tile, really', minimized: true, otherSpace: false },
         ] },
         { bundleId: 'com.apple.mail', name: 'Mail', hidden: false, running: false, pinned: true, windows: [] },
         { bundleId: 'com.microsoft.VSCode', name: 'Code', hidden: false, running: true, pinned: true, windows: [
-          { id: 21, title: 'app.js — Control', minimized: false, otherSpace: false },
+          { id: 21, title: 'app.js — Control', minimized: false, otherSpace: false, frame: { x: -5120, y: -260, w: 2560, h: 2105 }, z: 2 },
           { id: 22, title: 'init.lua — Control', minimized: false, otherSpace: true },
         ] },
         { bundleId: 'com.tinyspeck.slackmacgap', name: 'Slack', hidden: true, running: true, pinned: false, windows: [
           { id: 31, title: 'Slack — #general <b>&amp;</b> 😀', minimized: false, otherSpace: false },
         ] },
         { bundleId: 'com.apple.Terminal', name: 'Terminal', hidden: false, running: true, pinned: false, windows: [
-          { id: 41, title: '~ — zsh', minimized: false, otherSpace: false },
+          { id: 41, title: '~ — zsh', minimized: false, otherSpace: false, frame: { x: 300, y: 300, w: 1600, h: 1000 }, z: 4 },
         ] },
       ],
     },
     spotify,
     display: { awake: true },
+    shortcuts: { bundleId: 'com.microsoft.VSCode', name: 'Code', buttons: [
+      { label: 'Command palette' }, { label: 'Go to file' }, { label: 'Terminal' }, { label: 'Sidebar' }, { label: 'Search' }, { label: 'Save all' },
+    ] },
     badges: { items: [{ bundleId: 'com.tinyspeck.slackmacgap', label: '3' }, { bundleId: 'com.apple.mail', label: '12' }] },
     mic: { available: true, name: 'MacBook Pro Microphone', inUse: true, muted: false },
     system: { cpu: 12, memory: 63, battery: { level: 84, onPower: true, charging: true } },
@@ -276,6 +331,14 @@ class MockSocket {
       const exists = this.state.windows.apps.some((a) => a.windows.some((w) => w.id === args.id));
       if (exists) this.state.windows.focusedId = args.id;
       else Object.assign(reply, { ok: false, error: 'not_found' });
+    } else if (msg.cmd === 'windows.move' || msg.cmd === 'windows.layout') {
+      const win = this.state.windows.apps.flatMap((a) => a.windows).find((x) => x.id === args.id);
+      if (win && msg.cmd === 'windows.move') win.frame = { x: args.x, y: args.y, w: args.w, h: args.h };
+      if (win && msg.cmd === 'windows.layout') {
+        const f = { 'left-third': [0, 1 / 3], 'middle-third': [1 / 3, 1 / 3], 'right-third': [2 / 3, 1 / 3], 'left-half': [0, 0.5],
+          'right-half': [0.5, 0.5], center: [1 / 6, 2 / 3], max: [0, 1] }[args.preset];
+        if (f) win.frame = { x: Math.round(-7680 + 7680 * f[0]), y: -285, w: Math.round(7680 * f[1]), h: 2130 };
+      }
     } else if (msg.cmd === 'mic.set') {
       this.state.mic.muted = args.muted === true;
     } else if (msg.cmd === 'windows.launch') {
@@ -347,6 +410,7 @@ function boot() {
   const shell = $('shell');
   const scroller = $('windows');
   const macstatEl = $('macstat');
+  const actionsEl = $('actions');
   const stage = $('stage');
   const grid = $('grid');
   const lamp = $('lamp');
@@ -355,7 +419,7 @@ function boot() {
   const overlay = $('overlay');
   const dot = $('dot');
 
-  const store = { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, spotifyAt: 0 };
+  const store = { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, shortcuts: null, spotifyAt: 0 };
   const conn = { ws: null, attempt: 0, nextId: 1, pending: new Map(), lastRx: 0, versions: {} };
   let overlayTimer = null;
 
@@ -531,7 +595,8 @@ function boot() {
     const clock = $('clock');
     const width = scroller.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const height = scroller.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-      - clock.offsetHeight - parseFloat(getComputedStyle(clock).marginBottom) - macstatEl.offsetHeight;
+      - clock.offsetHeight - parseFloat(getComputedStyle(clock).marginBottom) - macstatEl.offsetHeight
+      - actionsEl.offsetHeight;
     const size = tileSize(n, width, height) + 'px';
     if (stage.style.getPropertyValue('--tile') !== size) stage.style.setProperty('--tile', size);
   }
@@ -778,10 +843,11 @@ function boot() {
 
   window.addEventListener('tablet-key', (e) => {
     const micInUse = !!(store.mic && store.mic.inUse);
-    const action = keyAction(e.detail && e.detail.key, { layerOpen: !!openApp, asleep: sleep.asleep, micInUse });
+    const action = keyAction(e.detail && e.detail.key, { layerOpen: !!openApp, asleep: sleep.asleep, micInUse, page: currentPage });
     if (action === 'closeLayer') closeLayer();
     else if (action === 'peek') peek();
     else if (action === 'toggleMic') toggleMic();
+    else if (action === 'panel') goToPage(0);
   });
   if (MOCK) document.addEventListener('keydown', (e) => { if (e.key === 'd' && conn.ws) conn.ws.toggleDisplay(); });
 
@@ -1022,6 +1088,280 @@ function boot() {
   renderers.system = renderSystem;
   renderers.badges = renderWindows;
 
+  /* ----- buttons for the Mac's front app ----- */
+
+  let actionsHtml = '';
+
+  function renderShortcuts() {
+    const sc = store.shortcuts;
+    const buttons = (sc && sc.buttons) || [];
+    const html = buttons.map((b, i) => `<button class="action" data-index="${i + 1}">${esc(b.label)}</button>`).join('');
+    if (html === actionsHtml) return;
+    actionsHtml = html;
+    actionsEl.innerHTML = html;
+    actionsEl.setAttribute('aria-label', sc && sc.name ? `Shortcuts for ${sc.name}` : 'Shortcuts');
+    fitTiles();
+  }
+
+  actionsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.action');
+    const sc = store.shortcuts;
+    if (!btn || !sc) return;
+    send('shortcuts.run', { bundleId: sc.bundleId, index: Number(btn.dataset.index) }).then((r) => { if (!r.ok) shake(btn); });
+  });
+  renderers.shortcuts = renderShortcuts;
+
+  /* ----- pages: panel, screens map, sketch pad ----- */
+
+  const pagesEl = $('pages');
+  const dotsEl = $('page-dots');
+  let currentPage = 0;
+
+  function goToPage(n) {
+    currentPage = Math.max(0, Math.min(2, n));
+    pagesEl.style.transform = `translateX(${-currentPage * 100}vw)`;
+    dotsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === currentPage));
+    if (currentPage !== 0 && openApp) closeLayer();
+    if (currentPage === 1) renderMap();
+    if (currentPage === 2) sizePad();
+  }
+
+  dotsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b) goToPage(Number(b.dataset.page));
+  });
+
+  // Swipe between pages on the panel page. The map and pad use their gestures for dragging and
+  // drawing, so there the dots and Back switch pages.
+  let swipe = null;
+  let swallowClick = false;
+  pagesEl.addEventListener('pointerdown', (e) => {
+    swipe = null;
+    if (currentPage !== 0 || openApp || e.target.closest('input, .scrub, .vol')) return;
+    swipe = { x: e.clientX, y: e.clientY };
+  });
+  pagesEl.addEventListener('pointerup', (e) => {
+    if (!swipe) return;
+    const dir = swipeDirection(e.clientX - swipe.x, e.clientY - swipe.y);
+    swipe = null;
+    if (!dir) return;
+    swallowClick = true; // the swipe ended over a tile; don't let it count as a tap
+    setTimeout(() => { swallowClick = false; }, 0);
+    goToPage(currentPage + dir);
+  });
+  document.addEventListener('click', (e) => {
+    if (swallowClick) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  /* ----- map page: drag windows around the Mac's screens ----- */
+
+  const mapEl = $('map');
+  const mapTools = $('map-tools');
+  const map = { fit: null, selected: null, drag: null };
+  const PRESETS = [
+    ['left-third', 'Left ⅓', 0, 1 / 3], ['middle-third', 'Middle ⅓', 1 / 3, 1 / 3], ['right-third', 'Right ⅓', 2 / 3, 1 / 3],
+    ['left-half', 'Left ½', 0, 0.5], ['right-half', 'Right ½', 0.5, 0.5], ['center', 'Centre', 1 / 6, 2 / 3],
+    ['max', 'Full', 0, 1], ['other-screen', 'Other screen', null, null],
+  ];
+  const presetGlyph = (left, width) => left == null
+    ? '<svg viewBox="0 0 64 22"><rect x="1" y="3" width="36" height="16" rx="3"/><rect x="45" y="5" width="18" height="12" rx="2"/><path d="M30 11h22m-5-4 5 4-5 4" fill="none"/></svg>'
+    : `<svg viewBox="0 0 64 22"><rect x="1" y="3" width="62" height="16" rx="3"/><rect class="zone" x="${1 + 62 * left}" y="3" width="${62 * width}" height="16" rx="3"/></svg>`;
+  mapTools.innerHTML = PRESETS.map(([id, label, l, w]) => `<button class="preset" data-preset="${id}">${presetGlyph(l, w)}<span>${label}</span></button>`).join('');
+
+  function mapWindows() {
+    const out = [];
+    for (const app of (store.windows && store.windows.apps) || []) {
+      for (const w of app.windows) {
+        if (w.frame && !w.minimized && !w.otherSpace && !app.hidden) out.push({ app, w });
+      }
+    }
+    // Back to front, so later elements sit on top like windows on the screen.
+    return out.sort((a, b) => (b.w.z || 1e9) - (a.w.z || 1e9));
+  }
+
+  function renderMap() {
+    if (currentPage !== 1 || map.drag) return;
+    const screens = store.windows && store.windows.screens;
+    if (!screens || !screens.length) { mapEl.innerHTML = ''; return; }
+    const box = mapEl.getBoundingClientRect();
+    map.fit = mapFit(screens, box.width, box.height);
+    const px = (r) => `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+    const wins = mapWindows();
+    if (map.selected && !wins.some((x) => x.w.id === map.selected)) map.selected = null;
+    mapEl.innerHTML = screens.map((sc) => `<div class="mscreen" style="${px(toMap(sc.frame, map.fit))}"><span>${esc(sc.name)}</span></div>`).join('')
+      + wins.map(({ app, w }) => {
+        const cls = ['mwin'];
+        if (w.id === store.windows.focusedId) cls.push('focused');
+        if (w.id === map.selected) cls.push('selected');
+        return `<div class="${cls.join(' ')}" data-id="${w.id}" style="${px(toMap(w.frame, map.fit))}">
+            <div class="mwin-head"><img src="${esc(iconUrl(app.bundleId))}" alt=""><span>${esc(w.title)}</span></div>
+            <div class="grip"></div>
+          </div>`;
+      }).join('');
+    mapTools.classList.toggle('on', !!map.selected);
+  }
+
+  const sendMove = makeThrottle((id, frame) => send('windows.move', { id, ...frame }), 80);
+
+  mapEl.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('.mwin');
+    if (!el) { map.selected = null; renderMap(); return; }
+    const id = Number(el.dataset.id);
+    map.selected = id;
+    mapEl.querySelectorAll('.mwin.selected').forEach((x) => x.classList.remove('selected'));
+    el.classList.add('selected');
+    mapTools.classList.add('on');
+    el.setPointerCapture(e.pointerId);
+    map.drag = {
+      id, el, x: e.clientX, y: e.clientY, moved: false, resize: !!e.target.closest('.grip'),
+      start: { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight },
+    };
+  });
+
+  mapEl.addEventListener('pointermove', (e) => {
+    const d = map.drag;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.moved && Math.hypot(dx, dy) < 6) return;
+    d.moved = true;
+    const r = { ...d.start };
+    if (d.resize) {
+      r.width = Math.max(30, d.start.width + dx);
+      r.height = Math.max(20, d.start.height + dy);
+    } else {
+      r.left += dx;
+      r.top += dy;
+    }
+    Object.assign(d.el.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+    d.rect = r;
+    sendMove(d.id, fromMap(r, map.fit));
+  });
+
+  function endDrag() {
+    const d = map.drag;
+    if (!d) return;
+    map.drag = null;
+    if (!d.moved) {
+      focusWindow(d.id, () => mapEl.querySelector(`.mwin[data-id="${d.id}"]`));
+    } else if (d.rect) {
+      send('windows.move', { id: d.id, ...fromMap(d.rect, map.fit) });
+    }
+    setTimeout(renderMap, 150); // let the Mac's update catch up before redrawing
+  }
+  mapEl.addEventListener('pointerup', endDrag);
+  mapEl.addEventListener('pointercancel', endDrag);
+
+  mapTools.addEventListener('click', (e) => {
+    const b = e.target.closest('.preset');
+    if (!b || !map.selected) return;
+    send('windows.layout', { id: map.selected, preset: b.dataset.preset }).then((r) => { if (!r.ok) shake(b); });
+  });
+
+  const renderWindowsOnly = renderers.windows;
+  renderers.windows = () => { renderWindowsOnly(); renderMap(); };
+
+  /* ----- sketch pad: draw, then copy to the Mac's clipboard ----- */
+
+  const padEl = $('pad');
+  const padCtx = padEl.getContext('2d');
+  const padHint = $('pad-hint');
+  const padToast = $('pad-toast');
+  const strokes = [];
+  let stroke = null;
+  let padFrame = 0;
+  const INK_WIDTH = 3.5;
+
+  function drawStrokes(ctx, list, color) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = INK_WIDTH;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const pts of list) {
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x, pts[0].y, INK_WIDTH / 2, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+      // Smooth the finger's path: curve through the midpoints between samples.
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length - 1; i++) {
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, (pts[i].x + pts[i + 1].x) / 2, (pts[i].y + pts[i + 1].y) / 2);
+      }
+      const last = pts[pts.length - 1];
+      ctx.lineTo(last.x, last.y);
+      ctx.stroke();
+    }
+  }
+
+  function redrawPad() {
+    padFrame = 0;
+    const dpr = window.devicePixelRatio || 1;
+    padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    padCtx.clearRect(0, 0, padEl.width, padEl.height);
+    drawStrokes(padCtx, strokes, '#eeeaf4');
+    padHint.hidden = strokes.length > 0;
+  }
+
+  function sizePad() {
+    const dpr = window.devicePixelRatio || 1;
+    padEl.width = Math.round(padEl.clientWidth * dpr);
+    padEl.height = Math.round(padEl.clientHeight * dpr);
+    redrawPad();
+  }
+
+  const padPoint = (e) => ({ x: e.offsetX, y: e.offsetY });
+  padEl.addEventListener('pointerdown', (e) => {
+    padEl.setPointerCapture(e.pointerId);
+    stroke = [padPoint(e)];
+    strokes.push(stroke);
+    redrawPad();
+  });
+  padEl.addEventListener('pointermove', (e) => {
+    if (!stroke) return;
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    events.forEach((ev) => stroke.push(padPoint(ev)));
+    if (!padFrame) padFrame = requestAnimationFrame(redrawPad);
+  });
+  const endStroke = () => { stroke = null; };
+  padEl.addEventListener('pointerup', endStroke);
+  padEl.addEventListener('pointercancel', endStroke);
+
+  $('pad-undo').addEventListener('click', () => { strokes.pop(); redrawPad(); });
+  $('pad-clear').addEventListener('click', () => { strokes.length = 0; redrawPad(); });
+
+  function padMessage(text) {
+    padToast.textContent = text;
+    padToast.hidden = false;
+    padToast.classList.remove('show');
+    void padToast.offsetWidth;
+    padToast.classList.add('show');
+  }
+
+  // Black ink on transparent, cropped to the drawing, at 2× for a crisp paste.
+  $('pad-copy').addEventListener('click', (e) => {
+    const b = strokeBounds(strokes, 12);
+    if (!b) { shake(e.currentTarget); return; }
+    const scale = 2;
+    const out = document.createElement('canvas');
+    out.width = Math.round(b.w * scale);
+    out.height = Math.round(b.h * scale);
+    const ctx = out.getContext('2d');
+    ctx.setTransform(scale, 0, 0, scale, -b.x * scale, -b.y * scale);
+    drawStrokes(ctx, strokes, '#000');
+    const png = out.toDataURL('image/png').split(',')[1];
+    send('pad.copy', { png }).then((r) => padMessage(r.ok ? 'Copied — paste it on the Mac' : 'Couldn\'t copy to the Mac'));
+  });
+
+  window.addEventListener('resize', () => {
+    if (currentPage === 1) renderMap();
+    if (currentPage === 2) sizePad();
+  });
+  goToPage(0);
+
   /* ----- clock and the tablet's battery ----- */
 
   const timeEl = $('clock-time');
@@ -1075,6 +1415,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector,
     rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction, formatClock, batteryTrend, batteryTone, tileSize, tileAction, macStats,
+    mapFit, toMap, fromMap, swipeDirection, strokeBounds,
   };
 }
 if (typeof document !== 'undefined') boot();

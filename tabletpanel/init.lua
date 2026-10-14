@@ -10,6 +10,8 @@ local display = require('tabletpanel.display')
 local badges = require('tabletpanel.badges')
 local mic = require('tabletpanel.mic')
 local system = require('tabletpanel.system')
+local shortcutButtons = require('tabletpanel.shortcut_buttons')
+local pad = require('tabletpanel.pad')
 
 local M = {}
 
@@ -24,7 +26,7 @@ local log = hs.logger.new('tabletpanel', 'info')
 function M.start(overrides)
   for k, v in pairs(overrides or {}) do M.config[k] = v end
 
-  M.modules = { windows, spotify, display, badges, mic, system }
+  M.modules = { windows, spotify, display, badges, mic, system, shortcutButtons, pad }
   local server
   local hub = Hub.new({
     send = function(message) server:send(message) end,

@@ -10,6 +10,10 @@ A Hammerspoon module that turns a spare Android tablet into an instant window sw
 - While an app uses the Mac's microphone (a call), a mic button appears next to the clock; it and the tablet's Recents key mute/unmute. Mics without a mute control are muted by setting their input volume to 0.
 - The bottom of the grid column shows the Mac's CPU, memory and MacBook battery (amber below 20% on battery).
 - Window previews in the sheet need *Screen Recording* for Hammerspoon (System Settings → Privacy & Security → Screen & System Audio Recording). Without it the cards just show titles.
+- **Pages**: swipe on the panel (or tap the dots at the bottom) to reach the **Screens** map and the **Sketch pad**; Back returns to the panel.
+  - Screens: your Mac's displays to scale with every window on the current Space. Drag a window to move it, drag its corner to resize, tap to focus; with a window selected, the buttons snap it to thirds/halves/centre/full or move it to the other screen.
+  - Sketch pad: draw or sign, then *Copy to Mac* puts it on the clipboard as black ink on a transparent PNG.
+- Above the status line, up to six buttons send keyboard shortcuts to the Mac's front app. Edit the sets in `tabletpanel/shortcuts.lua` and reload Hammerspoon.
 - Window changes come from `hs.window.filter` events (~50–100 ms to the tablet). Spotify changes come from Spotify's `PlaybackStateChanged` notification, plus a 2 s check for volume/shuffle/repeat changed inside Spotify.
 - Taps act optimistically on the tablet, and the Mac predicts the result of Spotify commands, so buttons respond instantly; a confirming read follows 1.5 s later.
 - The tablet sends a `ping` every 2 s; replies carry anything it missed. Hammerspoon pushes only to the **most recently connected** client, so if you also open the page on another device, the older one stays in sync via ping (≤ 2 s lag) instead of instantly.
