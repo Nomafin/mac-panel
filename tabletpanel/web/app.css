@@ -91,6 +91,8 @@ body.playing .glow { animation-play-state: running; }
 
 /* ---------- Windows ---------- */
 .windows {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -99,7 +101,7 @@ body.playing .glow { animation-play-state: running; }
 .windows::-webkit-scrollbar { display: none; }
 
 /* The icons gather in the middle of their column, like a dock. */
-.stage { --tile: 136px; position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
+.stage { --tile: 136px; position: relative; display: flex; flex: 1 0 auto; flex-direction: column; justify-content: center; }
 .grid {
   position: relative;
   z-index: 1;
@@ -151,6 +153,41 @@ body.playing .glow { animation-play-state: running; }
   transform-origin: left;
 }
 .trend { font-size: 13px; }
+
+/* Mic mute: only while an app is using the microphone. Red with a slash when muted. */
+.mic {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--plate-hi);
+  color: var(--ink);
+  transition: background 0.2s, color 0.2s, transform 0.25s var(--ease-spring);
+}
+.mic[hidden] { display: none; }
+.mic:active { transform: scale(0.9); }
+.mic svg { width: 22px; height: 22px; }
+.mic .slash { opacity: 0; transition: opacity 0.2s; }
+.mic.muted { background: #c8423b; color: #fff; }
+.mic.muted .slash { opacity: 1; }
+
+/* The Mac's CPU, memory and battery, quietly along the bottom of the grid column. */
+.macstat {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  padding: 10px 0 2px;
+  color: var(--dim);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.macstat:empty { display: none; }
+.macstat.low span:last-child { color: #e3a857; }
 .battery.warn { color: #e3a857; }
 .battery.low { color: #e36a5f; }
 
@@ -183,8 +220,8 @@ body.playing .glow { animation-play-state: running; }
 .tile.stack::after { left: 34px; right: 34px; top: -11px; height: 5px; background: rgba(40, 42, 51, 0.55); }
 .n {
   position: absolute;
-  top: 9px;
   right: 10px;
+  bottom: 9px;
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
@@ -196,6 +233,24 @@ body.playing .glow { animation-play-state: running; }
   line-height: 22px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+/* Unread badge, like the Dock's; the window count moves to the bottom corner to make room. */
+.badge {
+  position: absolute;
+  top: calc(var(--tile) * -0.04);
+  right: calc(var(--tile) * -0.04);
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background: #e5463d;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 3px var(--void);
 }
 .space-mark { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; color: var(--dim); }
 .tile.source { opacity: 0; transition: opacity 0s; }
@@ -523,6 +578,15 @@ body.layer-open .stage { opacity: 0.12; }
 .card:active { transform: scale(0.96); }
 .card.focused { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--plate-hi)); }
 .card.minimized .ct { color: var(--dim); }
+.thumb {
+  width: 100%;
+  height: 120px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--void);
+}
 .card .flag { top: 14px; right: 14px; }
 .ct {
   display: -webkit-box;

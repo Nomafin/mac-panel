@@ -6,6 +6,10 @@ A Hammerspoon module that turns a spare Android tablet into an instant window sw
 
 - `tabletpanel/` is a Hammerspoon module. It serves the tablet page (`tabletpanel/web/`) and a WebSocket at `ws://<mac>:8765/ws`.
 - The window grid works like the Dock: Finder and your Dock's pinned apps come first in Dock order (read from `com.apple.dock.plist`, so pinning or reordering on the Mac updates the tablet), then other running apps. Running apps sit on a tile; pinned apps that aren't running are just the icon. Tapping an app with no windows opens it like a Dock click (it bounces until its window appears); tiles shrink when there are more apps than fit.
+- Unread badges (Slack, Mail, …) are read from the Dock every 2 s, even while it's hidden, and shown on the tiles.
+- While an app uses the Mac's microphone (a call), a mic button appears next to the clock; it and the tablet's Recents key mute/unmute. Mics without a mute control are muted by setting their input volume to 0.
+- The bottom of the grid column shows the Mac's CPU, memory and MacBook battery (amber below 20% on battery).
+- Window previews in the sheet need *Screen Recording* for Hammerspoon (System Settings → Privacy & Security → Screen & System Audio Recording). Without it the cards just show titles.
 - Window changes come from `hs.window.filter` events (~50–100 ms to the tablet). Spotify changes come from Spotify's `PlaybackStateChanged` notification, plus a 2 s check for volume/shuffle/repeat changed inside Spotify.
 - Taps act optimistically on the tablet, and the Mac predicts the result of Spotify commands, so buttons respond instantly; a confirming read follows 1.5 s later.
 - The tablet sends a `ping` every 2 s; replies carry anything it missed. Hammerspoon pushes only to the **most recently connected** client, so if you also open the page on another device, the older one stays in sync via ping (≤ 2 s lag) instead of instantly.

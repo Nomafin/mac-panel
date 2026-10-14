@@ -7,6 +7,9 @@ local netguard = require('tabletpanel.netguard')
 local windows = require('tabletpanel.windows')
 local spotify = require('tabletpanel.spotify')
 local display = require('tabletpanel.display')
+local badges = require('tabletpanel.badges')
+local mic = require('tabletpanel.mic')
+local system = require('tabletpanel.system')
 
 local M = {}
 
@@ -21,13 +24,13 @@ local log = hs.logger.new('tabletpanel', 'info')
 function M.start(overrides)
   for k, v in pairs(overrides or {}) do M.config[k] = v end
 
-  M.modules = { windows, spotify, display }
+  M.modules = { windows, spotify, display, badges, mic, system }
   local server
   local hub = Hub.new({
     send = function(message) server:send(message) end,
     log = function(message) log.i(message) end,
   })
-  server = Server.new({ port = M.config.port, webDir = DIR .. 'web/', hub = hub, icon = windows.icon, log = log })
+  server = Server.new({ port = M.config.port, webDir = DIR .. 'web/', hub = hub, icon = windows.icon, thumb = windows.thumb, log = log })
   for _, mod in ipairs(M.modules) do hub:register(mod) end
 
   local active = false

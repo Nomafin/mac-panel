@@ -13,6 +13,7 @@ local function make()
     hub = { snapshot = function() return { versions = { windows = 3 } } end },
     readFile = function(p) return files[p] end,
     icon = function(b) return icons[b] end,
+    thumb = function(id) return id == 42 and '\255\216\255' or nil end,
     log = {},
   })
 end
@@ -74,6 +75,18 @@ return function(T)
     local s = make()
     for _, path in ipairs({ '/icon/com.unknown.png', '/icon/../x.png', '/icon/a b.png' }) do
       local _, status = s:route('GET', path)
+      T.eq(status, 404, path)
+    end
+  end)
+
+  T.test('serves window previews as uncached JPEG', function()
+    local body, status, headers = make():route('GET', '/thumb/42.jpg?t=123')
+    T.eq({ body, status, headers['Content-Type'], headers['Cache-Control'] }, { '\255\216\255', 200, 'image/jpeg', 'no-store' })
+  end)
+
+  T.test('missing or malformed previews are 404', function()
+    for _, path in ipairs({ '/thumb/7.jpg', '/thumb/x.jpg', '/thumb/42.png' }) do
+      local _, status = make():route('GET', path)
       T.eq(status, 404, path)
     end
   end)

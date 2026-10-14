@@ -21,7 +21,8 @@ local function readFile(path)
   return body
 end
 
--- opts: port, webDir (trailing slash), hub, icon(bundleId) -> png|nil, log (hs.logger), readFile
+-- opts: port, webDir (trailing slash), hub, icon(bundleId) -> png|nil, thumb(windowId) -> jpeg|nil,
+--       log (hs.logger), readFile
 function Server.new(opts)
   opts.readFile = opts.readFile or readFile
   return setmetatable({ opts = opts }, Server)
@@ -47,6 +48,12 @@ function Server:route(method, path)
   local png = bundleId and self.opts.icon and self.opts.icon(bundleId)
   if png then
     return png, 200, { ['Content-Type'] = 'image/png', ['Cache-Control'] = 'max-age=86400' }
+  end
+
+  local winId = clean:match('^/thumb/(%d+)%.jpg$')
+  local jpeg = winId and self.opts.thumb and self.opts.thumb(tonumber(winId))
+  if jpeg then
+    return jpeg, 200, { ['Content-Type'] = 'image/jpeg', ['Cache-Control'] = 'no-store' }
   end
 
   return 'not found', 404, PLAIN

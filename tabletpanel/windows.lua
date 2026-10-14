@@ -122,6 +122,24 @@ function W.actions.launch(args)
   return true
 end
 
+-- A JPEG preview of a window (needs Screen Recording permission), or nil.
+-- Minimized windows and windows on other Spaces can't be captured.
+local THUMB_WIDTH = 480
+
+function W.thumb(id)
+  if not hs.screenRecordingState() then return nil end
+  local win = findWindow(id)
+  if not win or win:isMinimized() then return nil end
+  local img = win:snapshot()
+  if not img then return nil end
+  local size = img:size()
+  if size.w <= 0 then return nil end
+  img = img:setSize({ w = THUMB_WIDTH, h = math.floor(size.h * THUMB_WIDTH / size.w) }, true)
+  local url = img:encodeAsURLString(false, 'JPEG')
+  local b64 = url and url:match('^data:image/jpeg;base64,(.+)$')
+  return b64 and hs.base64.decode(b64) or nil
+end
+
 -- PNG bytes of the app icon, cached per bundle id (false = no icon available).
 function W.icon(bundleId)
   if iconCache[bundleId] == nil then

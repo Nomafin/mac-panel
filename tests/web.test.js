@@ -194,3 +194,19 @@ test('tileAction: launch apps without windows, focus a single window, open the s
   assert.equal(h.tileAction({ running: true, windows: [w(1)] }), 'focus');
   assert.equal(h.tileAction({ running: true, windows: [w(1), w(2)] }), 'sheet');
 });
+
+test('keyAction: Recents toggles the mic during a call, and only then', () => {
+  assert.equal(h.keyAction('recents', { layerOpen: false, asleep: false, micInUse: true }), 'toggleMic');
+  assert.equal(h.keyAction('recents', { layerOpen: false, asleep: false, micInUse: false }), null);
+  // a dark screen wakes first
+  assert.equal(h.keyAction('recents', { layerOpen: false, asleep: true, micInUse: true }), 'peek');
+});
+
+test('macStats formats CPU, memory and the MacBook battery', () => {
+  assert.deepEqual(h.macStats({ cpu: 12, memory: 63, battery: { level: 84, onPower: true, charging: true } }),
+    { parts: ['CPU 12%', 'Memory 63%', 'MacBook 84% ⚡'], low: false });
+  assert.deepEqual(h.macStats({ cpu: null, memory: 63, battery: { level: 15, onPower: false, charging: false } }),
+    { parts: ['Memory 63%', 'MacBook 15%'], low: true });
+  assert.deepEqual(h.macStats({ cpu: 5, memory: 40 }), { parts: ['CPU 5%', 'Memory 40%'], low: false });
+  assert.deepEqual(h.macStats(null), { parts: [], low: false });
+});

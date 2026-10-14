@@ -123,10 +123,22 @@ function shouldSleep({ macAwake, connected, disconnectedSince, peekUntil, now })
 }
 
 // What a hardware key does. Volume keys never wake the screen: the cover can hold them down.
-function keyAction(key, { layerOpen, asleep }) {
+function keyAction(key, { layerOpen, asleep, micInUse }) {
   if (asleep) return key === 'back' || key === 'home' || key === 'recents' ? 'peek' : null;
   if (key === 'back' && layerOpen) return 'closeLayer';
+  if (key === 'recents' && micInUse) return 'toggleMic'; // a physical mute key during calls
   return null;
+}
+
+// The Mac status line: CPU, memory, and the MacBook's battery (amber when low and unplugged).
+function macStats(sys) {
+  if (!sys) return { parts: [], low: false };
+  const parts = [];
+  if (sys.cpu != null) parts.push(`CPU ${sys.cpu}%`);
+  if (sys.memory != null) parts.push(`Memory ${sys.memory}%`);
+  const b = sys.battery;
+  if (b) parts.push(`MacBook ${b.level}%${b.onPower ? ' ⚡' : ''}`);
+  return { parts, low: !!(b && !b.onPower && b.level < 20) };
 }
 
 const TREND_WINDOW_MS = 30 * 60000;
@@ -224,6 +236,9 @@ function mockState(variant) {
     },
     spotify,
     display: { awake: true },
+    badges: { items: [{ bundleId: 'com.tinyspeck.slackmacgap', label: '3' }, { bundleId: 'com.apple.mail', label: '12' }] },
+    mic: { available: true, name: 'MacBook Pro Microphone', inUse: true, muted: false },
+    system: { cpu: 12, memory: 63, battery: { level: 84, onPower: true, charging: true } },
   };
 }
 
@@ -261,6 +276,8 @@ class MockSocket {
       const exists = this.state.windows.apps.some((a) => a.windows.some((w) => w.id === args.id));
       if (exists) this.state.windows.focusedId = args.id;
       else Object.assign(reply, { ok: false, error: 'not_found' });
+    } else if (msg.cmd === 'mic.set') {
+      this.state.mic.muted = args.muted === true;
     } else if (msg.cmd === 'windows.launch') {
       // Like a real launch: the app's first window shows up a moment later.
       const app = this.state.windows.apps.find((a) => a.bundleId === args.bundleId);
@@ -329,6 +346,7 @@ function boot() {
   const root = document.documentElement;
   const shell = $('shell');
   const scroller = $('windows');
+  const macstatEl = $('macstat');
   const stage = $('stage');
   const grid = $('grid');
   const lamp = $('lamp');
@@ -337,7 +355,7 @@ function boot() {
   const overlay = $('overlay');
   const dot = $('dot');
 
-  const store = { windows: null, spotify: null, display: null, spotifyAt: 0 };
+  const store = { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, spotifyAt: 0 };
   const conn = { ws: null, attempt: 0, nextId: 1, pending: new Map(), lastRx: 0, versions: {} };
   let overlayTimer = null;
 
@@ -479,7 +497,14 @@ function boot() {
     return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${action === 'focus' ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}" title="${esc(label)}">
         <img class="icon" src="${esc(iconUrl(app.bundleId))}" alt="">
         ${action === 'sheet' ? `<span class="n">${app.windows.length}</span>` : win && win.otherSpace ? SPACE_MARK : ''}
+        ${badgeFor(app.bundleId) ? `<span class="badge">${esc(badgeFor(app.bundleId))}</span>` : ''}
       </button>`;
+  }
+
+  function badgeFor(bundleId) {
+    const items = store.badges && store.badges.items;
+    const hit = items && items.find((b) => b.bundleId === bundleId);
+    return hit ? hit.label : null;
   }
 
   // Apps launched from the tablet bounce, like in the Dock, until a window shows up.
@@ -506,7 +531,7 @@ function boot() {
     const clock = $('clock');
     const width = scroller.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const height = scroller.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-      - clock.offsetHeight - parseFloat(getComputedStyle(clock).marginBottom);
+      - clock.offsetHeight - parseFloat(getComputedStyle(clock).marginBottom) - macstatEl.offsetHeight;
     const size = tileSize(n, width, height) + 'px';
     if (stage.style.getPropertyValue('--tile') !== size) stage.style.setProperty('--tile', size);
   }
@@ -632,6 +657,8 @@ function boot() {
     return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`;
   }
 
+  let thumbStamp = 0; // a fresh preview each time the sheet opens
+
   function renderCards(animate) {
     const app = findApp(openApp);
     const focusedId = store.windows.focusedId;
@@ -644,7 +671,11 @@ function boot() {
       if (win.minimized) cls.push('minimized');
       if (animate || !known.has(win.id)) cls.push('fan');
       const flag = windowFlag(app, win);
+      // Previews need Screen Recording permission on the Mac; without it the image just goes away.
+      const thumb = !MOCK && !win.minimized && !win.otherSpace
+        ? `<img class="thumb" src="/thumb/${win.id}.jpg?t=${thumbStamp}" alt="" onerror="this.remove()">` : '';
       return `<button class="${cls.join(' ')}" data-id="${win.id}" style="--i:${i}">
+          ${thumb}
           <span class="ct">${esc(win.title)}</span>
           ${flag ? `<span class="flag">${flag}</span>` : ''}
         </button>`;
@@ -657,6 +688,7 @@ function boot() {
   }
 
   function openLayer(bundleId) {
+    thumbStamp = Date.now();
     const tile = tileFor(bundleId);
     if (!tile) return;
     clearTimeout(closeTimer);
@@ -745,9 +777,11 @@ function boot() {
   /* ----- hardware keys (from the tablet app) ----- */
 
   window.addEventListener('tablet-key', (e) => {
-    const action = keyAction(e.detail && e.detail.key, { layerOpen: !!openApp, asleep: sleep.asleep });
+    const micInUse = !!(store.mic && store.mic.inUse);
+    const action = keyAction(e.detail && e.detail.key, { layerOpen: !!openApp, asleep: sleep.asleep, micInUse });
     if (action === 'closeLayer') closeLayer();
     else if (action === 'peek') peek();
+    else if (action === 'toggleMic') toggleMic();
   });
   if (MOCK) document.addEventListener('keydown', (e) => { if (e.key === 'd' && conn.ws) conn.ws.toggleDisplay(); });
 
@@ -947,6 +981,47 @@ function boot() {
     shell.style.translate = `${x}px ${y}px`;
   }, SHIFT_MS);
 
+  /* ----- microphone: a mute button while an app is using the mic ----- */
+
+  const micEl = $('mic');
+
+  function renderMic() {
+    const m = store.mic;
+    const show = !!(m && m.available && m.inUse);
+    micEl.hidden = !show;
+    if (!show) return;
+    micEl.classList.toggle('muted', m.muted);
+    micEl.setAttribute('aria-label', m.muted ? 'Unmute microphone' : 'Mute microphone');
+    micEl.title = `${m.name}: ${m.muted ? 'muted' : 'live'}`;
+  }
+
+  function toggleMic() {
+    const m = store.mic;
+    if (!m || !m.available) return;
+    const muted = !m.muted;
+    m.muted = muted; // optimistic
+    renderMic();
+    send('mic.set', { muted }).then((r) => {
+      if (r.ok) return;
+      if (store.mic) store.mic.muted = !muted;
+      renderMic();
+      shake(micEl);
+    });
+  }
+
+  micEl.addEventListener('click', toggleMic);
+  renderers.mic = renderMic;
+
+  /* ----- the Mac's CPU, memory and battery ----- */
+
+  function renderSystem() {
+    const { parts, low } = macStats(store.system);
+    macstatEl.innerHTML = parts.map((p) => `<span>${esc(p)}</span>`).join('');
+    macstatEl.classList.toggle('low', low);
+  }
+  renderers.system = renderSystem;
+  renderers.badges = renderWindows;
+
   /* ----- clock and the tablet's battery ----- */
 
   const timeEl = $('clock-time');
@@ -999,7 +1074,7 @@ function boot() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector,
-    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction, formatClock, batteryTrend, batteryTone, tileSize, tileAction,
+    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction, formatClock, batteryTrend, batteryTone, tileSize, tileAction, macStats,
   };
 }
 if (typeof document !== 'undefined') boot();
