@@ -86,7 +86,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 
 ### Tablet setup
 
-1. **Update the browser engine**: Play Store → *Android System WebView* → Update (the app uses it; the page targets Chrome 119).
+1. **Update the browser engine**: on Android 7 the app shows the page with *Chrome* itself, and the page needs Chrome 111+ (119 is the last for Android 7). If the Play Store offers no update, install Chrome 119 from APKMirror with `adb install-multiple -r <unzipped .apkm>/*.apk`. Pick the **arm64-v8a + arm-v7a, Android 7.0+** variant: the 32-bit-only variant crashes 64-bit apps like Mac Panel (`is 32-bit instead of 64-bit` in `adb logcat -b crash`). Android only accepts the update if it's signed with Google's Chrome key, which you can confirm with `apksigner verify --print-certs`.
 2. **Turn on USB debugging**: *Settings → About device → Software info*, tap *Build number* 7 times. Then *Settings → Developer options → USB debugging* on.
 3. **Connect the USB cable** and accept *Allow USB debugging?* on the tablet (tick *Always allow from this computer*). `adb devices` should list it as `device`.
 4. `./gradlew installDebug` (see Build).
