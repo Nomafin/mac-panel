@@ -97,6 +97,9 @@ body.playing .glow { animation-play-state: running; }
   transition: transform 0.5s var(--ease-sheet);
 }
 .page { position: relative; flex: none; width: 100vw; height: 100vh; overflow: hidden; }
+/* touch-action stops at scroll containers (the window grid scrolls), so it's set on everything in
+   the panel page: Android then leaves horizontal moves to us instead of cancelling them. */
+.page:first-child, .page:first-child * { touch-action: pan-y; }
 .page-dots {
   position: fixed;
   bottom: 4px;
