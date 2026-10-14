@@ -1122,7 +1122,7 @@ function boot() {
     pagesEl.style.transform = `translateX(${-currentPage * 100}vw)`;
     dotsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === currentPage));
     if (currentPage !== 0 && openApp) closeLayer();
-    if (currentPage === 1) refreshShots();
+    if (currentPage === 1) { renderMap(); refreshShots(); }
     if (currentPage === 2) sizePad();
   }
 
@@ -1160,12 +1160,49 @@ function boot() {
 
   const mapEl = $('map');
   const mapTools = $('map-tools');
-  const map = { fit: null, selected: null, drag: null, shotStamp: 0 };
+  const map = { fit: null, selected: null, drag: null };
   const SHOT_REFRESH_MS = 15000; // each capture briefly blocks Hammerspoon, so not too often
 
-  function refreshShots() {
-    map.shotStamp = Date.now();
-    renderMap();
+  // Window screenshots: each new one is downloaded and decoded off-screen, then crossfaded over the
+  // old one, so a refresh never shows an empty window. Kept as object URLs so redraws reuse them.
+  const shots = new Map(); // window id -> object URL of its latest screenshot
+  let shotsBusy = false;
+
+  async function refreshShots() {
+    if (MOCK || shotsBusy) return;
+    shotsBusy = true;
+    const ids = mapWindows().map((x) => x.w.id);
+    for (const id of ids) { // one at a time: each capture briefly blocks Hammerspoon
+      try {
+        const res = await fetch(`/thumb/${id}.jpg?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) continue; // no Screen Recording permission, or the window can't be captured
+        const url = URL.createObjectURL(await res.blob());
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const old = shots.get(id);
+        shots.set(id, url);
+        fadeInShot(id, img);
+        if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
+      } catch (_) { /* keep the previous screenshot */ }
+    }
+    for (const [id, url] of shots) {
+      if (!ids.includes(id)) { URL.revokeObjectURL(url); shots.delete(id); }
+    }
+    shotsBusy = false;
+  }
+
+  function fadeInShot(id, img) {
+    const el = mapEl.querySelector(`.mwin[data-id="${id}"]`);
+    if (!el) return;
+    const old = el.querySelector('.mshot');
+    img.className = 'mshot fresh';
+    img.alt = '';
+    el.insertBefore(img, el.querySelector('.mwin-head')); // on top of the old one
+    img.addEventListener('animationend', () => {
+      img.classList.remove('fresh');
+      if (old) old.remove();
+    }, { once: true });
   }
   setInterval(() => { if (currentPage === 1 && !sleep.asleep) refreshShots(); }, SHOT_REFRESH_MS);
   const PRESETS = [
@@ -1204,7 +1241,7 @@ function boot() {
         if (w.id === store.windows.focusedId) cls.push('focused');
         if (w.id === map.selected) cls.push('selected');
         // The window's live look (needs Screen Recording on the Mac; otherwise just the plain card).
-        const shot = MOCK ? '' : `<img class="mshot" src="/thumb/${w.id}.jpg?t=${map.shotStamp}" alt="" onerror="this.remove()">`;
+        const shot = shots.has(w.id) ? `<img class="mshot" src="${shots.get(w.id)}" alt="">` : '';
         return `<div class="${cls.join(' ')}" data-id="${w.id}" style="${px(toMap(w.frame, map.fit))}">
             ${shot}
             <div class="mwin-head"><img src="${esc(iconUrl(app.bundleId))}" alt=""><span>${esc(w.title)}</span></div>
@@ -1260,7 +1297,8 @@ function boot() {
     } else if (d.rect) {
       send('windows.move', { id: d.id, ...fromMap(d.rect, map.fit) });
     }
-    setTimeout(d.moved ? refreshShots : renderMap, d.moved ? 400 : 150); // let the Mac catch up first
+    setTimeout(renderMap, 150); // let the Mac's update catch up before redrawing
+    if (d.moved) setTimeout(refreshShots, 400); // the window redraws at its new size
   }
   mapEl.addEventListener('pointerup', endDrag);
   mapEl.addEventListener('pointercancel', endDrag);
