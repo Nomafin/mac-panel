@@ -99,7 +99,7 @@ body.playing .glow { animation-play-state: running; }
 .windows::-webkit-scrollbar { display: none; }
 
 /* The icons gather in the middle of their column, like a dock. */
-.stage { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
+.stage { --tile: 136px; position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
 .grid {
   position: relative;
   z-index: 1;
@@ -107,8 +107,9 @@ body.playing .glow { animation-play-state: running; }
   flex-wrap: wrap;
   align-content: flex-start;
   justify-content: center;
-  gap: 22px 16px;
-  padding-top: 11px; /* room for the card stacks */
+  /* Everything scales with --tile, which shrinks when there are more apps than fit. */
+  gap: calc(var(--tile) * 0.162) calc(var(--tile) * 0.118);
+  padding-top: calc(var(--tile) * 0.08); /* room for the card stacks */
 }
 
 /* ---------- Clock and the tablet's battery ---------- */
@@ -157,11 +158,11 @@ body.playing .glow { animation-play-state: running; }
   position: relative;
   display: grid;
   place-items: center;
-  width: 136px;
-  height: 136px;
+  width: var(--tile);
+  height: var(--tile);
   padding: 0;
   border: 0;
-  border-radius: 30px;
+  border-radius: calc(var(--tile) * 0.22);
   background: rgba(21, 22, 27, 0.86);
   transition: background 0.2s, transform 0.25s var(--ease-spring), opacity 0.25s;
 }
@@ -200,11 +201,33 @@ body.playing .glow { animation-play-state: running; }
 .tile.source { opacity: 0; transition: opacity 0s; }
 
 .icon {
-  width: 86px;
-  height: 86px;
+  width: calc(var(--tile) * 0.632);
+  height: calc(var(--tile) * 0.632);
   transition: transform 0.4s var(--ease-spring), filter 0.4s, opacity 0.4s;
 }
 .tile.focused .icon { transform: translateY(-2px) scale(1.05); }
+
+/* Like the Dock: a dot under running apps; pinned apps that aren't running have none. */
+.run {
+  position: absolute;
+  bottom: calc(var(--tile) * 0.055);
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.tile.off { background: rgba(21, 22, 27, 0.5); }
+
+/* Launching from the tablet: the icon bounces until the app's first window appears. */
+.tile.launching .icon { animation: launch-bounce 0.9s var(--ease-out) infinite; }
+@keyframes launch-bounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-16%); }
+  70% { transform: translateY(0); }
+  82% { transform: translateY(-4%); }
+}
 
 /* Minimized windows look tucked away: the icon sinks and loses its colour. Hidden apps dim. */
 .tile.minimized .icon { transform: translateY(6px) scale(0.76); filter: grayscale(0.85); opacity: 0.55; }
@@ -244,7 +267,7 @@ body.playing .glow { animation-play-state: running; }
   top: 0;
   left: 0;
   z-index: 2;
-  border-radius: 30px;
+  border-radius: calc(var(--tile) * 0.22);
   pointer-events: none;
   opacity: 0;
   background: color-mix(in srgb, var(--accent) 12%, transparent);

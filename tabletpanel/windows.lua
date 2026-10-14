@@ -1,5 +1,7 @@
 -- Window switcher: tracks standard windows on all Spaces (best effort) and focuses them.
+-- Like the Dock, it also lists the Dock's pinned apps and running apps without windows.
 local Model = require('tabletpanel.windows_model')
+local Dock = require('tabletpanel.dock_model')
 
 local W = { name = 'windows', actions = {} }
 
@@ -11,8 +13,15 @@ local EVENTS = {
 }
 local DEBOUNCE_SECONDS = 0.05
 
-local model, allFilter, spaceFilter, spacesWatcher, debounceTimer, notify
+local DOCK_PLIST = os.getenv('HOME') .. '/Library/Preferences/com.apple.dock.plist'
+
+local model, allFilter, spaceFilter, spacesWatcher, appWatcher, dockWatcher, debounceTimer, notify
 local iconCache = {}
+local pins = Dock.pins(nil)
+
+local function readPins()
+  pins = Dock.pins(hs.plist.read(DOCK_PLIST))
+end
 
 local function schedule()
   if debounceTimer then debounceTimer:stop() end
@@ -32,6 +41,19 @@ function W.start(notifyFn)
   allFilter:subscribe(EVENTS, schedule)
   spaceFilter:subscribe(EVENTS, schedule)
   spacesWatcher = hs.spaces.watcher.new(schedule):start()
+  -- Window events miss apps that have no windows (launching, quitting, Finder with all closed).
+  appWatcher = hs.application.watcher.new(schedule):start()
+  readPins()
+  -- The Dock rewrites its plist when pins change; watch the folder, as the write replaces the file.
+  dockWatcher = hs.pathwatcher.new(DOCK_PLIST:match('^(.*)/'), function(paths)
+    for _, path in ipairs(paths) do
+      if path:sub(-#'com.apple.dock.plist') == 'com.apple.dock.plist' then
+        readPins()
+        schedule()
+        return
+      end
+    end
+  end):start()
   schedule()
 end
 
@@ -40,6 +62,8 @@ function W.stop()
   if allFilter then allFilter:unsubscribeAll(); allFilter = nil end
   if spaceFilter then spaceFilter:unsubscribeAll(); spaceFilter = nil end
   if spacesWatcher then spacesWatcher:stop(); spacesWatcher = nil end
+  if appWatcher then appWatcher:stop(); appWatcher = nil end
+  if dockWatcher then dockWatcher:stop(); dockWatcher = nil end
 end
 
 function W.state()
@@ -60,8 +84,16 @@ function W.state()
       }
     end
   end
+  -- Apps that would show in the Dock (kind 1: regular apps, not agents or background tools).
+  local running = {}
+  for _, app in ipairs(hs.application.runningApplications()) do
+    local bid = app:bundleID()
+    if bid and app:kind() == 1 then
+      running[#running + 1] = { bundleId = bid, name = app:name(), hidden = app:isHidden() }
+    end
+  end
   local focused = hs.window.focusedWindow()
-  return model:build(raw, focused and focused:id() or nil)
+  return model:build(raw, focused and focused:id() or nil, { pins = pins, running = running })
 end
 
 local function findWindow(id)
@@ -78,6 +110,15 @@ function W.actions.focus(args)
   if app and app:isHidden() then app:unhide() end
   if win:isMinimized() then win:unminimize() end
   win:focus() -- macOS switches Space if the window lives on another one (best effort)
+  return true
+end
+
+-- Opens an app like a click in the Dock: launches it, or brings it forward and, if it has
+-- no windows, asks it for one (the "reopen" event `open` sends).
+function W.actions.launch(args)
+  local bid = args.bundleId
+  if type(bid) ~= 'string' or not bid:match('^[%w%.%-_]+$') then return false, 'bad_bundle_id' end
+  hs.task.new('/usr/bin/open', nil, { '-b', bid }):start()
   return true
 end
 

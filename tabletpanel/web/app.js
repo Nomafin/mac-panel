@@ -160,6 +160,29 @@ function batteryTone({ level, plugged }, trend) {
   return '';
 }
 
+const TILE_MAX = 136;
+const TILE_MIN = 64;
+
+// The largest tile (px) at which `count` tiles fit in width × height without scrolling.
+// Gaps and the stack strips' headroom scale with the tile.
+function tileSize(count, width, height) {
+  for (let s = TILE_MAX; s > TILE_MIN; s -= 2) {
+    const k = s / TILE_MAX;
+    const gx = 16 * k;
+    const gy = 22 * k;
+    const cols = Math.max(1, Math.floor((width + gx) / (s + gx)));
+    const rows = Math.ceil(count / cols);
+    if (rows * s + Math.max(0, rows - 1) * gy + 11 * k <= height) return s;
+  }
+  return TILE_MIN;
+}
+
+// What tapping an app's tile does, like clicking it in the Dock.
+function tileAction(app) {
+  if (!app.windows.length) return 'launch';
+  return app.windows.length === 1 ? 'focus' : 'sheet';
+}
+
 /* ---------- Mock mode (?mock, ?mock=idle, ?mock=nospotify) ---------- */
 
 function mockArt(h1, h2) {
@@ -180,19 +203,21 @@ function mockState(variant) {
     windows: {
       focusedId: 11,
       apps: [
-        { bundleId: 'com.apple.Safari', name: 'Safari', hidden: false, windows: [
+        { bundleId: 'com.apple.finder', name: 'Finder', hidden: false, running: true, pinned: true, windows: [] },
+        { bundleId: 'com.apple.Safari', name: 'Safari', hidden: false, running: true, pinned: true, windows: [
           { id: 11, title: 'GitHub – Pull requests', minimized: false, otherSpace: false },
           { id: 12, title: 'Hammerspoon docs: hs.window.filter', minimized: false, otherSpace: false },
           { id: 13, title: 'A very long window title that should be clamped to two lines on the tile, really', minimized: true, otherSpace: false },
         ] },
-        { bundleId: 'com.microsoft.VSCode', name: 'Code', hidden: false, windows: [
+        { bundleId: 'com.apple.mail', name: 'Mail', hidden: false, running: false, pinned: true, windows: [] },
+        { bundleId: 'com.microsoft.VSCode', name: 'Code', hidden: false, running: true, pinned: true, windows: [
           { id: 21, title: 'app.js — Control', minimized: false, otherSpace: false },
           { id: 22, title: 'init.lua — Control', minimized: false, otherSpace: true },
         ] },
-        { bundleId: 'com.tinyspeck.slackmacgap', name: 'Slack', hidden: true, windows: [
+        { bundleId: 'com.tinyspeck.slackmacgap', name: 'Slack', hidden: true, running: true, pinned: false, windows: [
           { id: 31, title: 'Slack — #general <b>&amp;</b> 😀', minimized: false, otherSpace: false },
         ] },
-        { bundleId: 'com.apple.Terminal', name: 'Terminal', hidden: false, windows: [
+        { bundleId: 'com.apple.Terminal', name: 'Terminal', hidden: false, running: true, pinned: false, windows: [
           { id: 41, title: '~ — zsh', minimized: false, otherSpace: false },
         ] },
       ],
@@ -236,6 +261,17 @@ class MockSocket {
       const exists = this.state.windows.apps.some((a) => a.windows.some((w) => w.id === args.id));
       if (exists) this.state.windows.focusedId = args.id;
       else Object.assign(reply, { ok: false, error: 'not_found' });
+    } else if (msg.cmd === 'windows.launch') {
+      // Like a real launch: the app's first window shows up a moment later.
+      const app = this.state.windows.apps.find((a) => a.bundleId === args.bundleId);
+      setTimeout(() => {
+        if (!app || app.windows.length) return;
+        const id = 900 + this.v;
+        Object.assign(app, { running: true, windows: [{ id, title: app.name + ' window', minimized: false, otherSpace: false }] });
+        this.state.windows.focusedId = id;
+        this.v += 1;
+        if (this.onmessage) this.onmessage({ data: JSON.stringify(this.stateMsg('windows')) });
+      }, 1500);
     } else if (mod === 'spotify' && sp.running) {
       if (action === 'playpause') sp.state = sp.state === 'playing' ? 'paused' : 'playing';
       else if (action === 'seek') sp.positionMs = args.ms;
@@ -429,18 +465,51 @@ function boot() {
   // Tiles depend only on the window data; focus, entrances and the open sheet are classes
   // applied afterwards, so a focus change never rebuilds the grid (and never cuts an animation).
   function tileHtml(app) {
-    const single = app.windows.length === 1;
+    const action = tileAction(app);
     const win = app.windows[0];
     const cls = ['tile'];
+    if (app.running === false) cls.push('off');
     if (app.hidden) cls.push('app-hidden');
-    if (single && win.minimized) cls.push('minimized');
-    if (!single) cls.push('stack');
-    const label = single ? `${app.name}: ${win.title}${windowFlag(app, win) ? ' (' + windowFlag(app, win) + ')' : ''}`
-      : `${app.name}, ${app.windows.length} windows`;
-    return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${single ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}" title="${esc(label)}">
+    if (action === 'focus' && win.minimized) cls.push('minimized');
+    if (action === 'sheet') cls.push('stack');
+    if (launching.has(app.bundleId)) cls.push('launching');
+    const label = action === 'focus' ? `${app.name}: ${win.title}${windowFlag(app, win) ? ' (' + windowFlag(app, win) + ')' : ''}`
+      : action === 'sheet' ? `${app.name}, ${app.windows.length} windows`
+      : app.running === false ? `Open ${app.name}` : `${app.name}: new window`;
+    return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${action === 'focus' ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}" title="${esc(label)}">
         <img class="icon" src="${esc(iconUrl(app.bundleId))}" alt="">
-        ${single ? (win.otherSpace ? SPACE_MARK : '') : `<span class="n">${app.windows.length}</span>`}
+        ${action === 'sheet' ? `<span class="n">${app.windows.length}</span>` : win && win.otherSpace ? SPACE_MARK : ''}
+        ${app.running === false ? '' : '<span class="run"></span>'}
       </button>`;
+  }
+
+  // Apps launched from the tablet bounce, like in the Dock, until a window shows up.
+  const launching = new Map(); // bundleId -> timeout
+  const LAUNCH_BOUNCE_MS = 10000;
+
+  function launchApp(bundleId) {
+    clearTimeout(launching.get(bundleId));
+    launching.set(bundleId, setTimeout(() => { launching.delete(bundleId); renderWindows(); }, LAUNCH_BOUNCE_MS));
+    renderWindows();
+    send('windows.launch', { bundleId }).then((r) => {
+      if (r.ok) return;
+      clearTimeout(launching.get(bundleId));
+      launching.delete(bundleId);
+      renderWindows();
+      shake(tileFor(bundleId));
+    });
+  }
+
+  // The tiles shrink when there are more apps than fit, so nothing needs scrolling.
+  function fitTiles() {
+    const n = store.windows && store.windows.apps ? store.windows.apps.length : 0;
+    const cs = getComputedStyle(scroller);
+    const clock = $('clock');
+    const width = scroller.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const height = scroller.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+      - clock.offsetHeight - parseFloat(getComputedStyle(clock).marginBottom);
+    const size = tileSize(n, width, height) + 'px';
+    if (stage.style.getPropertyValue('--tile') !== size) stage.style.setProperty('--tile', size);
   }
 
   let gridHtml = '';
@@ -454,6 +523,10 @@ function boot() {
       if (openApp) closeLayer();
       return;
     }
+    w.apps.forEach((a) => {
+      if (a.windows.length && launching.has(a.bundleId)) { clearTimeout(launching.get(a.bundleId)); launching.delete(a.bundleId); }
+    });
+    fitTiles();
     const html = w.apps.map(tileHtml).join('');
     if (html !== gridHtml) {
       gridHtml = html;
@@ -492,6 +565,7 @@ function boot() {
   const lampWatch = new ResizeObserver(() => placeLamp());
   lampWatch.observe(grid);
   lampWatch.observe($('clock')); // the clock sits above the grid; its height moves the tiles
+  new ResizeObserver(() => fitTiles()).observe(scroller);
 
   function shake(el) {
     if (!el) return;
@@ -525,11 +599,16 @@ function boot() {
   grid.addEventListener('click', (e) => {
     const tile = e.target.closest('.tile');
     if (!tile || !store.windows) return;
-    if (tile.dataset.id) {
+    const app = findApp(tile.dataset.app);
+    if (!app) return;
+    const action = tileAction(app);
+    if (action === 'focus') {
       hop(tile);
-      focusWindow(Number(tile.dataset.id), () => tileFor(tile.dataset.app));
+      focusWindow(app.windows[0].id, () => tileFor(app.bundleId));
+    } else if (action === 'sheet') {
+      openLayer(app.bundleId);
     } else {
-      openLayer(tile.dataset.app);
+      launchApp(app.bundleId);
     }
   });
 
@@ -921,7 +1000,7 @@ function boot() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     esc, formatTime, estimatePosition, seekFraction, backoff, makeThrottle, makeDemotionDetector,
-    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction, formatClock, batteryTrend, batteryTone,
+    rgbToHsl, pickAccent, accentCss, mockState, shouldSleep, keyAction, formatClock, batteryTrend, batteryTone, tileSize, tileAction,
   };
 }
 if (typeof document !== 'undefined') boot();

@@ -10,6 +10,12 @@ local function win(id, bundleId, title, extra)
   return w
 end
 
+local function bids(state)
+  local out = {}
+  for _, app in ipairs(state.apps) do out[#out + 1] = app.bundleId end
+  return out
+end
+
 local function ids(state)
   local out = {}
   for _, app in ipairs(state.apps) do
@@ -23,7 +29,7 @@ return function(T)
     local m = Model.new()
     T.eq(m:build({ win(1, 'com.x.Safari', 'GitHub') }, 1), {
       focusedId = 1,
-      apps = { { bundleId = 'com.x.Safari', name = 'Safari', hidden = false,
+      apps = { { bundleId = 'com.x.Safari', name = 'Safari', hidden = false, running = true, pinned = false,
         windows = { { id = 1, title = 'GitHub', minimized = false, otherSpace = false } } } },
     })
   end)
@@ -89,5 +95,43 @@ return function(T)
   T.test('falls back to bundle id when app name is missing', function()
     local w = win(1, 'a.A', 'x'); w.appName = nil
     T.eq(Model.new():build({ w }).apps[1].name, 'a.A')
+  end)
+
+  T.test('pinned apps come first in Dock order, then the others in first-seen order', function()
+    local m = Model.new()
+    local dock = { pins = { { bundleId = 'p.One', name = 'One' }, { bundleId = 'p.Two', name = 'Two' } } }
+    T.eq(bids(m:build({ win(1, 'x.X', 'x'), win(2, 'p.Two', 'two') }, nil, dock)), { 'p.One', 'p.Two', 'x.X' })
+  end)
+
+  T.test('a pinned app that is not running has no windows and running = false', function()
+    local s = Model.new():build({}, nil, { pins = { { bundleId = 'p.One', name = 'One' } } })
+    T.eq(json.encode(s), '{"apps":[{"bundleId":"p.One","hidden":false,"name":"One","pinned":true,"running":false,"windows":[]}]}')
+  end)
+
+  T.test('a running pinned app is marked running and uses its own name', function()
+    local s = Model.new():build({ win(1, 'p.One', 'doc', { appName = 'One App' }) }, nil,
+      { pins = { { bundleId = 'p.One', name = 'One' } } })
+    T.eq(s.apps[1].running, true)
+    T.eq(s.apps[1].pinned, true)
+    T.eq(s.apps[1].name, 'One App')
+    T.eq(ids(s), { 1 })
+  end)
+
+  T.test('running apps without windows are listed (Finder with every window closed)', function()
+    local s = Model.new():build({}, nil, { running = { { bundleId = 'r.R', name = 'R', hidden = true } } })
+    T.eq(json.encode(s), '{"apps":[{"bundleId":"r.R","hidden":true,"name":"R","pinned":false,"running":true,"windows":[]}]}')
+  end)
+
+  T.test('a windowless running app keeps its place when it opens a window', function()
+    local m = Model.new()
+    m:build({ win(1, 'a.A', 'one') }, nil, { running = { { bundleId = 'r.R', name = 'R' }, { bundleId = 'a.A', name = 'A' } } })
+    T.eq(bids(m:build({ win(9, 'z.Z', 'new'), win(2, 'r.R', 'now a window'), win(1, 'a.A', 'one') }, nil,
+      { running = { { bundleId = 'a.A', name = 'A' }, { bundleId = 'r.R', name = 'R' }, { bundleId = 'z.Z', name = 'Z' } } })),
+      { 'a.A', 'r.R', 'z.Z' })
+  end)
+
+  T.test('a pin listed twice appears once', function()
+    local dock = { pins = { { bundleId = 'p.One', name = 'One' }, { bundleId = 'p.One', name = 'One' } } }
+    T.eq(bids(Model.new():build({}, nil, dock)), { 'p.One' })
   end)
 end
