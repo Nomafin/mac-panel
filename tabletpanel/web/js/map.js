@@ -4,7 +4,7 @@ import { esc, makeThrottle, shake } from './util.js';
 import { allWindowIds } from './shots.js';
 
 const SHOT_REFRESH_MS = 15000; // each capture briefly blocks Hammerspoon, so not too often
-const MOVE_THROTTLE_MS = 80;
+const MOVE_THROTTLE_MS = 150; // each move makes the Mac rebuild and push the window list
 
 // Fits the bounding box of all screens into width × height, centred.
 export function mapFit(screens, width, height) {

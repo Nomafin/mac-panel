@@ -10,9 +10,12 @@ local wf = hs.window.filter
 local EVENTS = {
   wf.windowCreated, wf.windowDestroyed, wf.windowTitleChanged, wf.windowFocused,
   wf.windowMinimized, wf.windowUnminimized, wf.windowHidden, wf.windowUnhidden,
-  wf.windowInCurrentSpace, wf.windowNotInCurrentSpace, wf.windowsChanged, wf.windowMoved,
+  wf.windowInCurrentSpace, wf.windowNotInCurrentSpace, wf.windowsChanged,
 }
 local DEBOUNCE_SECONDS = 0.05
+-- Moving or resizing fires continuously; the map follows at most 4 times a second, so a drag
+-- doesn't keep Hammerspoon busy rebuilding and pushing the window list.
+local MOVE_INTERVAL_SECONDS = 0.25
 
 local DOCK_PLIST = os.getenv('HOME') .. '/Library/Preferences/com.apple.dock.plist'
 
@@ -32,6 +35,15 @@ local function schedule()
   end)
 end
 
+-- For moves: an update already on its way covers this one; otherwise one goes out shortly.
+local function scheduleMove()
+  if debounceTimer then return end
+  debounceTimer = hs.timer.doAfter(MOVE_INTERVAL_SECONDS, function()
+    debounceTimer = nil
+    notify()
+  end)
+end
+
 function W.start(notifyFn)
   notify = notifyFn
   model = Model.new()
@@ -41,6 +53,7 @@ function W.start(notifyFn)
   spaceFilter = wf.new(nil):setDefaultFilter({ currentSpace = true })
   allFilter:subscribe(EVENTS, schedule)
   spaceFilter:subscribe(EVENTS, schedule)
+  allFilter:subscribe(wf.windowMoved, scheduleMove)
   spacesWatcher = hs.spaces.watcher.new(schedule):start()
   -- Window events miss apps that have no windows (launching, quitting, Finder with all closed).
   appWatcher = hs.application.watcher.new(schedule):start()
@@ -78,13 +91,14 @@ function W.state()
     local id = w:id()
     if id then onSpace[id] = true end
   end
-  -- Front-to-back rank of the visible windows, so the map can stack them like the screen does.
+  -- Front-to-back rank, so the map can stack windows like the screen does. The filter's
+  -- most-recently-focused order matches macOS's stacking and is free, unlike orderedWindows().
   local zOf = {}
-  for i, w in ipairs(hs.window.orderedWindows()) do
-    local id = w:id()
-    if id then zOf[id] = i end
-  end
   local raw = {}
+  for i, w in ipairs(allFilter:getWindows(wf.sortByFocusedLast)) do
+    local wid = w:id()
+    if wid then zOf[wid] = i end
+  end
   for _, w in ipairs(allFilter:getWindows()) do
     local app, id = w:application(), w:id()
     if app and id then
