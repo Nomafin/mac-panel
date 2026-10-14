@@ -18,36 +18,42 @@ A Hammerspoon module that turns a spare Android tablet into an instant window sw
 - Taps act optimistically on the tablet, and the Mac predicts the result of Spotify commands, so buttons respond instantly; a confirming read follows 1.5 s later.
 - The tablet sends a `ping` every 2 s; replies carry anything it missed. Hammerspoon pushes only to the **most recently connected** client, so if you also open the page on another device, the older one stays in sync via ping (≤ 2 s lag) instead of instantly.
 - The server only runs when the Mac's default gateway has your home router's MAC address (no Location permission needed; works on Wi-Fi and Ethernet).
-- No authentication: anyone on your home network can use the panel.
+- **No authentication.** The panel trusts your home network, and anyone on it who opens `http://<mac-ip>:8765/` gets the same powers as the tablet:
+  - see your window titles, app list and Spotify state, and (with Screen Recording granted) **screenshots of your windows**;
+  - focus, move, resize and launch apps; send the keyboard shortcuts configured in `shortcuts.lua` to the front app;
+  - put an image on your clipboard; mute the microphone; control Spotify.
+
+  That's why the server only runs on your home network (see `homeRouterMACs`). Don't use it on networks you share with people you don't trust.
 - The Mac also reports whether it's in use (display awake and unlocked), so the tablet can go dark with it.
 - Spotify is never launched by the panel: every AppleScript checks that Spotify is running first, and reads pause briefly while Spotify is quitting.
 
 ## Mac setup
 
 1. **Install Hammerspoon**: `brew install --cask hammerspoon` (this also installs the `hs` command-line tool). Open it, and in its Preferences tick *Launch Hammerspoon at login*.
-2. **Grant Accessibility**: System Settings → Privacy & Security → Accessibility → enable Hammerspoon. If it's already listed but `hs -c 'print(hs.accessibilityState())'` prints `false`, toggle it off and on. (Screen Recording is *not* needed.)
-3. **Link the module** (from this repo's root):
+2. **Grant Accessibility**: System Settings → Privacy & Security → Accessibility → enable Hammerspoon. If it's already listed but `hs -c 'print(hs.accessibilityState())'` prints `false`, toggle it off and on.
+3. **Optional: grant Screen Recording** (same place → *Screen & System Audio Recording* → Hammerspoon) for window previews in the sheet and on the map. macOS asks Hammerspoon to restart afterwards, and from time to time asks you to confirm the permission again. Without it, everything else works and the previews are just left out.
+4. **Link the module** (from this repo's root):
    ```bash
    mkdir -p ~/.hammerspoon
    ln -s "$PWD/tabletpanel" ~/.hammerspoon/tabletpanel
    ```
-4. **Find your router's MAC** while on your home network:
+5. **Find your router's MAC** while on your home network:
    ```bash
    arp -n $(route -n get default | awk '/gateway/{print $2}')
    ```
-5. **Put this in `~/.hammerspoon/init.lua`**:
+6. **Put this in `~/.hammerspoon/init.lua`**:
    ```lua
    require("hs.ipc") -- enables the `hs` command line tool
 
    tabletpanel = require("tabletpanel").start({
-     homeRouterMACs = { "aa:bb:cc:dd:ee:ff" }, -- from step 4; {} = always on
+     homeRouterMACs = { "aa:bb:cc:dd:ee:ff" }, -- from step 5; {} = always on
    })
    ```
    Keep the global `tabletpanel =` assignment — it stops Lua from garbage-collecting the server.
-6. **Reload** Hammerspoon (menu bar icon → Reload Config). The console should show `tabletpane: home network (…)` and `tabletpane: listening on port 8765` (Hammerspoon shortens logger names to 10 characters).
-7. **Spotify**: the first time it runs, macOS asks *"Hammerspoon wants to control Spotify"* — click **Allow**.
-8. **Firewall**: if the macOS firewall is on, allow incoming connections for Hammerspoon when prompted (or in System Settings → Network → Firewall → Options).
-9. **Give the Mac a fixed IP**: in your router's DHCP settings, reserve an address for the Mac (`ipconfig getifaddr en0` shows the current one). The tablet URL is `http://<that-ip>:8765/`.
+7. **Reload** Hammerspoon (menu bar icon → Reload Config). The console should show `tabletpane: home network (…)` and `tabletpane: listening on port 8765` (Hammerspoon shortens logger names to 10 characters).
+8. **Spotify**: the first time it runs, macOS asks *"Hammerspoon wants to control Spotify"* — click **Allow**.
+9. **Firewall**: if the macOS firewall is on, allow incoming connections for Hammerspoon when prompted (or in System Settings → Network → Firewall → Options).
+10. **Give the Mac a fixed IP**: in your router's DHCP settings, reserve an address for the Mac (`ipconfig getifaddr en0` shows the current one). The tablet URL is `http://<that-ip>:8765/`.
 
 ## Test on the Mac first
 
@@ -101,7 +107,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 3. **Connect the USB cable** and accept *Allow USB debugging?* on the tablet (tick *Always allow from this computer*). `adb devices` should list it as `device`.
 4. `./gradlew installDebug` (see Build).
 5. **Make it the home app**: press Home, choose *Mac Panel*, then *Always*.
-6. If the Mac's address isn't `http://192.168.1.62:8765/`, set it in the escape menu → *Mac address…* (`192.168.1.70` is enough; `http://` and `:8765` are added).
+6. **Set the Mac's address**: on first start the app asks for it (the IP from Mac setup, e.g. `192.168.1.20` — `http://` and `:8765` are added). Change it later from the escape menu → *Mac address…*.
 7. **Turn off the screen lock**: *Settings → Lock screen and security → Screen lock type → None*. Otherwise the tablet waits for a swipe or PIN after every restart instead of going straight to the panel.
 8. In *Settings → Battery*, exclude Mac Panel from battery optimisation, and keep the tablet on its charger.
 9. Fully Kiosk Browser is no longer needed; uninstall it if it's installed.
@@ -131,11 +137,11 @@ Updating the page needs no reinstall: the app loads it from the Mac. Only change
 | Symptom | Fix |
 |---|---|
 | Tablet can't load the page | Same network? `curl http://<mac-ip>:8765/` from another machine; check the macOS firewall allows Hammerspoon; check the console for `not on home network`. |
-| Console says `not on home network` at home | Re-run the `arp` command from setup step 4 and compare with `homeRouterMACs` (format doesn't matter: `0:1e:a:…` and `00:1E:0A:…` both match). Mesh/extender networks may expose a different gateway MAC — add it to the list. |
+| Console says `not on home network` at home | Re-run the `arp` command from Mac setup step 5 and compare with `homeRouterMACs` (format doesn't matter: `0:1e:a:…` and `00:1E:0A:…` both match). Mesh/extender networks may expose a different gateway MAC — add it to the list. |
 | `homeRouterMACs is empty` warning | The server then always runs; add your router MAC to restrict it. |
 | "Reconnecting…" never clears | Hammerspoon running? Mac asleep? IP changed (set a DHCP reservation)? |
-| No windows, console says `hs.axuielement - module requires accessibility` | Accessibility permission missing — see setup step 2, then reload. |
-| Windows missing | Windows on other Spaces only appear once Hammerspoon has seen them. Untitled and non-standard windows (palettes, popups) are hidden by design. A minimized window of a hidden app reappears when the app is unhidden. |
+| No windows, console says `hs.axuielement - module requires accessibility` | Accessibility permission missing — see Mac setup step 2, then reload. |
+| Windows missing | Windows on other Spaces only appear once Hammerspoon has seen them. Non-standard windows (palettes, popups) and small untitled windows are hidden by design; a normal-sized untitled window (e.g. an Edge or Chrome web app like TweetDeck) is shown under its app's name. A minimized window of a hidden app reappears when the app is unhidden. |
 | Spotify panel missing or stale | Spotify must be running. Check System Settings → Privacy & Security → Automation → Hammerspoon → Spotify is on. Console warnings start with `tabletpane: spotify:`. |
 | Changes to the page don't show | The page is served with `no-store`; escape menu → *Reload*. Lua changes need a Hammerspoon reload (`hs -c 'hs.reload()'`). |
 | `adb devices` shows `unauthorized` | Unplug and replug, and accept the prompt on the tablet. No prompt: *Developer options → Revoke USB debugging authorisations*, then replug. |
