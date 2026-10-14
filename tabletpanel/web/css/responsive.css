@@ -1,0 +1,25 @@
+/* ---------- Portrait: music becomes a strip across the top ---------- */
+@media (orientation: portrait) {
+  :root { --panel: auto; }
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); row-gap: 14px; }
+  .shell.no-spotify { grid-template-columns: 1fr; grid-template-rows: 0px minmax(0, 1fr); row-gap: 0; }
+  .spotify { order: -1; }
+  .sp-full {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    column-gap: 20px;
+    row-gap: 8px;
+    width: auto;
+  }
+  .art-wrap { grid-row: span 4; }
+  .spotify.idle .sp-idle { width: auto; }
+  .glow { left: 30%; top: 12%; }
+  .ambient {
+    -webkit-mask-image: radial-gradient(ellipse 90% 40% at 25% 12%, #000 0%, transparent 100%);
+    mask-image: radial-gradient(ellipse 90% 40% at 25% 12%, #000 0%, transparent 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 0.01s !important; }
+}

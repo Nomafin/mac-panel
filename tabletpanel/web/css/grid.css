@@ -1,0 +1,161 @@
+/* ---------- Windows ---------- */
+.windows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.windows::-webkit-scrollbar { display: none; }
+
+/* The icons gather in the middle of their column, like a dock. */
+.stage { --tile: 136px; position: relative; display: flex; flex: 1 0 auto; flex-direction: column; justify-content: center; }
+.grid {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  /* Everything scales with --tile, which shrinks when there are more apps than fit. */
+  gap: calc(var(--tile) * 0.162) calc(var(--tile) * 0.118);
+  padding-top: calc(var(--tile) * 0.08); /* room for the card stacks */
+}
+
+.tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tile);
+  height: var(--tile);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--tile) * 0.22);
+  background: rgba(21, 22, 27, 0.86);
+  transition: background 0.2s, transform 0.25s var(--ease-spring), opacity 0.25s;
+}
+.tile:active { background: var(--plate-hi); transform: scale(0.93); }
+
+/* Several windows: card edges peek out above the tile, and the corner says how many. */
+.tile.stack::before,
+.tile.stack::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: -6px;
+  height: 6px;
+  border-radius: 12px 12px 0 0;
+  background: rgba(40, 42, 51, 0.95);
+}
+.tile.stack::after { left: 34px; right: 34px; top: -11px; height: 5px; background: rgba(40, 42, 51, 0.55); }
+.n {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: rgba(238, 234, 244, 0.1);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* Unread badge, like the Dock's; the window count moves to the bottom corner to make room. */
+.badge {
+  position: absolute;
+  top: calc(var(--tile) * -0.04);
+  right: calc(var(--tile) * -0.04);
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background: #e5463d;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 3px var(--void);
+}
+.space-mark { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; color: var(--dim); }
+.tile.source { opacity: 0; transition: opacity 0s; }
+
+.icon {
+  width: calc(var(--tile) * 0.632);
+  height: calc(var(--tile) * 0.632);
+  transition: transform 0.4s var(--ease-spring), filter 0.4s, opacity 0.4s;
+}
+.tile.focused .icon { transform: translateY(-2px) scale(1.05); }
+
+/* Running apps sit on a tile; pinned apps that aren't running are just the icon. */
+.tile.off { background: transparent; }
+
+/* Launching from the tablet: the icon bounces until the app's first window appears. */
+.tile.launching .icon { animation: launch-bounce 0.9s var(--ease-out) infinite; }
+@keyframes launch-bounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-16%); }
+  70% { transform: translateY(0); }
+  82% { transform: translateY(-4%); }
+}
+
+/* Minimized windows look tucked away: the icon sinks and loses its colour. Hidden apps dim. */
+.tile.minimized .icon { transform: translateY(6px) scale(0.76); filter: grayscale(0.85); opacity: 0.55; }
+.tile.app-hidden .icon { opacity: 0.4; }
+
+/* Like the Dock, the icon you picked hops. */
+.tile.hop .icon { animation: hop 0.62s var(--ease-out); }
+@keyframes hop {
+  0% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-16px) scale(1.06, 0.98); }
+  55% { transform: translateY(0) scale(1.05, 0.94); }
+  75% { transform: translateY(-4px) scale(1); }
+  100% { transform: translateY(-2px) scale(1.05); }
+}
+
+.flag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 12px;
+  font-stretch: 85%;
+  color: var(--dim);
+}
+
+.tile.enter { animation: arrive 0.6s var(--ease-spring) both; }
+@keyframes arrive {
+  from { opacity: 0; transform: scale(0.7); }
+}
+.tile.shake { animation: shake 0.42s; }
+@keyframes shake { 25% { transform: translateX(-7px); } 75% { transform: translateX(7px); } }
+
+.empty { margin: 40px 8px; color: var(--dim); font-size: 18px; }
+
+/* The focus lamp: one light that glides to whichever window has focus. */
+.lamp {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  border-radius: calc(var(--tile) * 0.22);
+  pointer-events: none;
+  opacity: 0;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 28px -4px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition:
+    transform 0.55s var(--ease-out),
+    width 0.55s var(--ease-out),
+    height 0.55s var(--ease-out),
+    opacity 0.3s;
+}
+.lamp.lit { opacity: 1; }
+.lamp.instant { transition: opacity 0.3s; }

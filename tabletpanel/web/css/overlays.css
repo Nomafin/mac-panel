@@ -1,0 +1,33 @@
+/* ---------- Overlays: reconnecting notice, connection dot, sleep cover ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--dim);
+  font-size: 22px;
+}
+.dot {
+  position: fixed;
+  right: 5px;
+  bottom: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c44;
+}
+.dot.on { background: #3a7; opacity: 0.45; }
+.sleep {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1s var(--ease-out);
+}
+body.asleep .sleep { opacity: 1; pointer-events: auto; }
+/* Nothing to animate behind a black screen; spare the tablet's GPU. */
+body.asleep *, body.asleep *::before, body.asleep *::after { animation-play-state: paused !important; }

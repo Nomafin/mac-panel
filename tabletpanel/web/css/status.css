@@ -1,0 +1,92 @@
+/* ---------- Around the grid: clock, tablet battery, mic button, shortcut buttons, Mac stats ---------- */
+.clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 30px;
+  font-variant-numeric: tabular-nums;
+}
+.clock-time { font-size: 52px; font-weight: 300; line-height: 1; letter-spacing: -0.01em; }
+.clock-date { font-size: 19px; color: var(--dim); }
+.battery { display: inline-flex; align-items: center; gap: 7px; font-size: 15px; color: var(--dim); }
+.battery[hidden] { display: none; }
+.batt-icon {
+  position: relative;
+  width: 22px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.batt-icon::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  right: -4px;
+  width: 2px;
+  height: 3px;
+  border-radius: 0 1px 1px 0;
+  background: currentColor;
+}
+.batt-icon i {
+  position: absolute;
+  inset: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleX(var(--level, 1));
+  transform-origin: left;
+}
+.trend { font-size: 13px; }
+
+/* Mic mute: only while an app is using the microphone. Red with a slash when muted. */
+.mic {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--plate-hi);
+  color: var(--ink);
+  transition: background 0.2s, color 0.2s, transform 0.25s var(--ease-spring);
+}
+.mic[hidden] { display: none; }
+.mic:active { transform: scale(0.9); }
+.mic svg { width: 22px; height: 22px; }
+.mic .slash { opacity: 0; transition: opacity 0.2s; }
+.mic.muted { background: #c8423b; color: #fff; }
+.mic.muted .slash { opacity: 1; }
+
+/* Buttons for the Mac's front app. */
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 12px; }
+.actions:empty { display: none; }
+.action {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--plate);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  transition: transform 0.2s var(--ease-spring), background 0.2s;
+}
+.action:active { transform: scale(0.93); background: var(--plate-hi); }
+
+/* The Mac's CPU, memory and battery, quietly along the bottom of the grid column. */
+.macstat {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  padding: 10px 0 2px;
+  color: var(--dim);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.macstat:empty { display: none; }
+.macstat.low span:last-child { color: #e3a857; }
+.battery.warn { color: #e3a857; }
+.battery.low { color: #e36a5f; }

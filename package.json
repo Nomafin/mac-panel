@@ -1,0 +1,11 @@
+{
+  "name": "tabletpanel",
+  "private": true,
+  "description": "A spare Android tablet as a touch control panel for your Mac (Hammerspoon + a small Android app).",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:web && npm run test:lua",
+    "test:web": "node --test tests/web/",
+    "test:lua": "${LUA:-lua} tests/run.lua"
+  }
+}

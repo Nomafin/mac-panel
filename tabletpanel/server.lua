@@ -6,7 +6,7 @@ local Server = {}
 Server.__index = Server
 
 local PLAIN = { ['Content-Type'] = 'text/plain; charset=utf-8' }
-local STATIC = { ['/'] = 'index.html', ['/index.html'] = 'index.html', ['/app.css'] = 'app.css', ['/app.js'] = 'app.js' }
+local STATIC = { ['/'] = 'index.html', ['/index.html'] = 'index.html' }
 local TYPES = {
   html = 'text/html; charset=utf-8',
   css = 'text/css; charset=utf-8',
@@ -32,7 +32,13 @@ function Server:route(method, path)
   if method ~= 'GET' then return 'method not allowed', 405, PLAIN end
   local clean = path:match('^[^?#]*')
 
+  -- The page itself, plus its scripts and styles: /js/<name>.js and /css/<name>.css, where the
+  -- name is letters, digits and dashes only (no dots, so no way out of the folder).
   local file = STATIC[clean]
+  if not file then
+    local dir, name, ext = clean:match('^/(%a+)/([%w%-]+)%.(%a+)$')
+    if (dir == 'js' and ext == 'js') or (dir == 'css' and ext == 'css') then file = dir .. '/' .. name .. '.' .. ext end
+  end
   if file then
     local body = self.opts.readFile(self.opts.webDir .. file)
     if not body then return 'not found', 404, PLAIN end

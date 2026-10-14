@@ -1,0 +1,109 @@
+/* ---------- Second layer: an app's windows ---------- */
+.stage { transition: opacity 0.45s ease; }
+body.layer-open .stage { opacity: 0.12; }
+
+.layer { position: fixed; inset: 0; z-index: 5; }
+.layer-backdrop { position: absolute; inset: 0; }
+.sheet {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  border-radius: 26px;
+  background: rgba(19, 20, 25, 0.97);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.9), inset 0 0 0 1px rgba(238, 234, 244, 0.06);
+  transition: clip-path 0.6s var(--ease-sheet);
+  will-change: clip-path;
+}
+.sheet.no-anim, .sheet.no-anim .sheet-icon { transition: none; }
+
+.sheet-head { display: flex; align-items: center; gap: 16px; }
+.sheet-icon {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  transform-origin: 0 0;
+  transition: transform 0.6s var(--ease-sheet);
+}
+.sheet-names { flex: 1; min-width: 0; }
+.sheet-names h2 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  font-stretch: 88%;
+  line-height: 1.1;
+}
+.sheet-names p { margin: 2px 0 0; color: var(--dim); font-size: 15px; }
+.sheet-names > * { transition: opacity 0.3s 0.2s, transform 0.5s 0.15s var(--ease-out); }
+.layer:not(.open) .sheet-names > * { opacity: 0; transform: translateX(-10px); transition-delay: 0s; }
+
+.sheet-close {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(238, 234, 244, 0.07);
+  color: var(--dim);
+  transition: opacity 0.3s 0.25s, transform 0.3s var(--ease-spring);
+}
+.sheet-close svg { width: 22px; height: 22px; }
+.sheet-close:active { transform: scale(0.88); }
+.layer:not(.open) .sheet-close { opacity: 0; transition-delay: 0s; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  align-content: start;
+  gap: 12px;
+  margin-top: 22px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.cards::-webkit-scrollbar { display: none; }
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 104px;
+  padding: 16px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--plate-hi);
+  text-align: left;
+  transition: transform 0.25s var(--ease-spring), background 0.2s, opacity 0.15s;
+}
+.card:active { transform: scale(0.96); }
+.card.focused { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--plate-hi)); }
+.card.minimized .ct { color: var(--dim); }
+.thumb {
+  width: 100%;
+  height: 120px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--void);
+}
+.card .flag { top: 14px; right: 14px; }
+.ct {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+  font-stretch: 85%;
+  font-weight: 500;
+  line-height: 1.2;
+}
+/* Cards fan out of the app icon, one after another. */
+.card.fan { animation: fan 0.6s var(--ease-spring) both; animation-delay: calc(0.12s + var(--i) * 0.05s); }
+@keyframes fan {
+  from { opacity: 0; transform: translate(-24px, -30px) scale(0.6) rotate(-4deg); }
+}
+.layer.closing .card { opacity: 0; }

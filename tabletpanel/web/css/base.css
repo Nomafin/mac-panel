@@ -1,0 +1,89 @@
+/* Lit by the music: pure black (AMOLED pixels off), quiet plates for windows, and the
+   current album art as the only light source — its glow and accent colour tie both halves. */
+
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #9db4ff;
+}
+
+:root {
+  --void: #000;
+  --plate: #15161b;
+  --plate-hi: #22242c;
+  --ink: #eeeaf4;
+  --dim: #8e8c99;
+  --accent: #9db4ff;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --panel: 320px;
+  transition: --accent 1.4s ease;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--void);
+  color: var(--ink);
+  font-family: 'Bricolage Grotesque', system-ui, Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.3;
+  font-optical-sizing: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- Ambient light: the album art, tiny and scaled up, so the blur is nearly free ---------- */
+.ambient {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* A pool of light behind the album that falls off to true black. */
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 80% 46%, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 78% at 80% 46%, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+}
+.glow {
+  position: absolute;
+  left: 72%;
+  top: 46%;
+  width: 64px;
+  height: 64px;
+  background: center / cover no-repeat;
+  filter: blur(5px) saturate(1.7);
+  transform: translate(-50%, -50%) scale(22);
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  will-change: transform, opacity;
+  animation: drift 48s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+.glow.on { opacity: 0.5; }
+body:not(.playing) .glow.on { opacity: 0.2; }
+body.playing .glow { animation-play-state: running; }
+
+@keyframes drift {
+  0% { transform: translate(-50%, -50%) scale(22) rotate(0deg); }
+  50% { transform: translate(-58%, -44%) scale(25) rotate(18deg); }
+  100% { transform: translate(-44%, -54%) scale(21) rotate(-12deg); }
+}
+
+/* ---------- Layout ---------- */
+.shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--panel);
+  column-gap: 20px;
+  height: 100vh;
+  padding: 14px 14px 26px 16px; /* bottom: room for the page dots */
+  transition: grid-template-columns 0.7s var(--ease-out), translate 1s;
+}

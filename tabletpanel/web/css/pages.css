@@ -1,0 +1,41 @@
+/* ---------- Pages: panel, screens map, sketch pad ---------- */
+.pages {
+  display: flex;
+  width: 300vw;
+  height: 100vh;
+  touch-action: pan-y; /* horizontal moves stay with us, for the page swipe */
+  transition: transform 0.5s var(--ease-sheet);
+}
+.page { position: relative; flex: none; width: 100vw; height: 100vh; overflow: hidden; }
+/* touch-action stops at scroll containers (the window grid scrolls), so it's set on everything in
+   the panel page: Android then leaves horizontal moves to us instead of cancelling them. */
+.page:first-child, .page:first-child * { touch-action: pan-y; }
+.page-dots {
+  position: fixed;
+  bottom: 4px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  transform: translateX(-50%);
+}
+.page-dots button {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.page-dots button::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: auto;
+  border-radius: 3px;
+  background: var(--dim);
+  opacity: 0.45;
+  transition: width 0.3s var(--ease-out), opacity 0.3s, background 0.3s;
+}
+.page-dots button.on::before { width: 18px; opacity: 1; background: var(--ink); }
+body.layer-open .page-dots { opacity: 0; pointer-events: none; }

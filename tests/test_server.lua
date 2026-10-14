@@ -4,8 +4,9 @@ local json = require('tabletpanel.json')
 local function make()
   local files = {
     ['/web/index.html'] = '<html>hi</html>',
-    ['/web/app.js'] = 'console.log(1)',
-    ['/web/app.css'] = 'body{}',
+    ['/web/js/main.js'] = 'console.log(1)',
+    ['/web/js/map-page.js'] = 'export {}',
+    ['/web/css/base.css'] = 'body{}',
   }
   local icons = { ['com.apple.Safari'] = '\137PNG\r\n\26\n' }
   return Server.new({
@@ -31,15 +32,19 @@ return function(T)
 
   T.test('serves js and css with the right types', function()
     local s = make()
-    local _, _, js = s:route('GET', '/app.js')
-    local _, _, css = s:route('GET', '/app.css')
+    local jsBody, jsStatus, js = s:route('GET', '/js/main.js')
+    local _, _, css = s:route('GET', '/css/base.css')
+    T.eq({ jsBody, jsStatus }, { 'console.log(1)', 200 })
     T.eq(js['Content-Type'], 'application/javascript; charset=utf-8')
+    T.eq(js['Cache-Control'], 'no-store')
     T.eq(css['Content-Type'], 'text/css; charset=utf-8')
+    T.eq(select(2, s:route('GET', '/js/map-page.js')), 200)
   end)
 
   T.test('only whitelisted files are served', function()
     local s = make()
-    for _, path in ipairs({ '/missing.js', '/../init.lua', '/%2e%2e/init.lua', '/web/app.js', '/init.lua' }) do
+    for _, path in ipairs({ '/missing.js', '/../init.lua', '/%2e%2e/init.lua', '/web/js/main.js', '/init.lua',
+      '/js/../init.lua', '/js/main.css', '/css/base.js', '/js/sub/x.js', '/js/.hidden.js', '/js/missing.js' }) do
       local _, status = s:route('GET', path)
       T.eq(status, 404, path)
     end
