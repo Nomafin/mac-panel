@@ -479,7 +479,6 @@ function boot() {
     return `<button class="${cls.join(' ')}" data-app="${esc(app.bundleId)}"${action === 'focus' ? ` data-id="${win.id}"` : ''} aria-label="${esc(label)}" title="${esc(label)}">
         <img class="icon" src="${esc(iconUrl(app.bundleId))}" alt="">
         ${action === 'sheet' ? `<span class="n">${app.windows.length}</span>` : win && win.otherSpace ? SPACE_MARK : ''}
-        ${app.running === false ? '' : '<span class="run"></span>'}
       </button>`;
   }
 

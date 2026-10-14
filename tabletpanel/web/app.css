@@ -207,18 +207,8 @@ body.playing .glow { animation-play-state: running; }
 }
 .tile.focused .icon { transform: translateY(-2px) scale(1.05); }
 
-/* Like the Dock: a dot under running apps; pinned apps that aren't running have none. */
-.run {
-  position: absolute;
-  bottom: calc(var(--tile) * 0.055);
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: var(--dim);
-}
-.tile.off { background: rgba(21, 22, 27, 0.5); }
+/* Running apps sit on a tile; pinned apps that aren't running are just the icon. */
+.tile.off { background: transparent; }
 
 /* Launching from the tablet: the icon bounces until the app's first window appears. */
 .tile.launching .icon { animation: launch-bounce 0.9s var(--ease-out) infinite; }
