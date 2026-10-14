@@ -43,7 +43,7 @@ Mac (Hammerspoon)                          Tablet (Android 7)
                                             │    page ◄─ `tablet-key` events
                                             │    page ─► TabletApp.setScreen(on)
                                             ├─ key capture / Home intent / Recents receiver
-                                            ├─ corner long-press → escape menu
+                                            ├─ Back held 1.5 s → escape menu
                                             └─ "Waiting for your Mac…" view
 ```
 
@@ -87,8 +87,8 @@ The page checks `window.TabletApp` exists before calling; in a browser it is abs
 
 ### Escape menu
 
-A transparent 64 dp square over the top-left corner. Holding it for 3 s opens a native
-dialog with:
+Holding Back for 1.5 s opens a native dialog (changed after on-device testing: the
+invisible corner was too hard to hit). A shorter press is an ordinary Back. The dialog has:
 - *Reload* — reloads the WebView.
 - *Mac address…* — text field prefilled with the current URL; saved to `SharedPreferences`
   after validation, then loaded.
@@ -96,7 +96,6 @@ dialog with:
 - *Choose home app* — opens `Settings.ACTION_HOME_SETTINGS` so the Samsung launcher can be
   restored.
 
-Taps shorter than 3 s pass through to the page (the corner is part of the window grid area).
 
 ### Mac unreachable
 

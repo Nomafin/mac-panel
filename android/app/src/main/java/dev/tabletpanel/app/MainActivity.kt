@@ -19,9 +19,7 @@ import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
@@ -33,7 +31,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
-import kotlin.math.abs
 
 /**
  * The whole app: the panel page full screen, acting as the tablet's home screen.
@@ -43,8 +40,6 @@ class MainActivity : Activity() {
 
     private companion object {
         const val RETRY_MS = 5000L
-        const val MENU_HOLD_MS = 3000L
-        const val CORNER_DP = 64
         const val PREF_URL = "url"
     }
 
@@ -68,9 +63,8 @@ class MainActivity : Activity() {
     private var resumed = false
     private var pausedAt = 0L
 
-    private var holdX = 0f
-    private var holdY = 0f
-    private val holdMenu = Runnable { openMenuFromHold() }
+    private val backHold = BackHold()
+    private val backHeld = Runnable { if (backHold.heldLongEnough()) showMenu() }
 
     private val recentsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -199,10 +193,18 @@ class MainActivity : Activity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val key = Keys.forKeyCode(event.keyCode) ?: return super.dispatchKeyEvent(event)
-        // Back acts on release, like everywhere in Android; volume keys on press. Repeats are dropped:
-        // the cover can hold a volume key down.
-        val fireOn = if (event.keyCode == KeyEvent.KEYCODE_BACK) KeyEvent.ACTION_UP else KeyEvent.ACTION_DOWN
-        if (event.action == fireOn && event.repeatCount == 0) sendKey(key)
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            // Back acts on release, like everywhere in Android; holding it opens the escape menu.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                backHold.pressed()
+                handler.postDelayed(backHeld, BackHold.HOLD_MS)
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                handler.removeCallbacks(backHeld)
+                if (backHold.released()) sendKey(key)
+            }
+        } else if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            sendKey(key) // repeats are dropped: the cover can hold a volume key down
+        }
         return true
     }
 
@@ -240,34 +242,7 @@ class MainActivity : Activity() {
             or View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
     }
 
-    /* ----- escape menu: hold the top-left corner for 3 s ----- */
-
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        val corner = CORNER_DP * resources.displayMetrics.density
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> if (event.x < corner && event.y < corner) {
-                holdX = event.x
-                holdY = event.y
-                handler.postDelayed(holdMenu, MENU_HOLD_MS)
-            }
-            MotionEvent.ACTION_MOVE -> {
-                val slop = ViewConfiguration.get(this).scaledTouchSlop
-                if (abs(event.x - holdX) > slop || abs(event.y - holdY) > slop) handler.removeCallbacks(holdMenu)
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN ->
-                handler.removeCallbacks(holdMenu)
-        }
-        return super.dispatchTouchEvent(event)
-    }
-
-    private fun openMenuFromHold() {
-        // The page saw the finger go down; tell it the press is over so nothing stays pressed.
-        val now = SystemClock.uptimeMillis()
-        val cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, holdX, holdY, 0)
-        super.dispatchTouchEvent(cancel)
-        cancel.recycle()
-        showMenu()
-    }
+    /* ----- escape menu: hold Back ----- */
 
     private fun showMenu() {
         val items = arrayOf("Reload", "Mac address…", "Android settings", "Choose home app")

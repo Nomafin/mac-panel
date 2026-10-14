@@ -58,10 +58,10 @@ Unit tests: `/opt/homebrew/opt/lua@5.4/bin/lua tests/run.lua` (`brew install lua
 
 `android/` is a small app, *Mac Panel*, that shows the panel full screen and acts as the tablet's home screen:
 
-- It starts at boot, and Home, Back and Recents all keep you on the panel. Back closes the window sheet. The volume keys are caught and do nothing for now.
+- It starts at boot, and Home, Back and Recents all keep you on the panel. Back closes the window sheet (holding it opens the escape menu). The volume keys are caught and do nothing for now.
 - Each key reaches the page as a `tablet-key` event (`back`, `home`, `recents`, `volumeup`, `volumedown`), so giving a key a job is a page change in `web/app.js` (`keyAction`).
 - The screen goes black when the Mac's display sleeps, the Mac locks or its screensaver starts. It also goes black after 30 s without a connection, e.g. when the Mac is fully asleep. It comes back when the Mac wakes. Tapping the black screen shows the panel for 60 s.
-- **Escape menu**: hold the top-left corner for 3 seconds. It has *Reload*, *Mac address…*, *Android settings* and *Choose home app* (to go back to the Samsung launcher).
+- **Escape menu**: hold Back for about 1.5 seconds. It has *Reload*, *Mac address…*, *Android settings* and *Choose home app* (to go back to the Samsung launcher).
 - If the Mac can't be reached when the app starts, it shows *Waiting for your Mac…* and retries every 5 s.
 
 ### Build
@@ -104,7 +104,7 @@ Updating the page needs no reinstall: the app loads it from the Mac. Only change
 - [ ] Back closes an open window sheet; otherwise nothing happens.
 - [ ] Home and Recents stay on the panel (the app switcher may flash briefly).
 - [ ] Volume keys don't change the tablet's volume.
-- [ ] Holding the top-left corner for 3 s opens the menu; a short tap there still works as a normal tap.
+- [ ] Holding Back for 1.5 s opens the menu; a short press still closes the window sheet.
 - [ ] Menu → *Mac address…* with a wrong address shows *Waiting for your Mac…*; fixing it brings the panel back.
 - [ ] Mac display sleep (`pmset displaysleepnow`) or lock (Ctrl-Cmd-Q) turns the tablet black within about a second; waking/unlocking brings it back.
 - [ ] Mac fully asleep: the tablet goes black after ~30 s and comes back when the Mac wakes.
