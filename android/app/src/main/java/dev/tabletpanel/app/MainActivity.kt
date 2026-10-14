@@ -48,7 +48,8 @@ class MainActivity : Activity() {
     private lateinit var waiting: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("panel", MODE_PRIVATE) }
-    private val url get() = prefs.getString(PREF_URL, null) ?: MacUrl.DEFAULT
+    /** The panel's address on the Mac; null until it has been set in the menu. */
+    private val url get() = MacUrl.startUrl(prefs.getString(PREF_URL, null))
 
     private var loadFailed = false
     private val retry = Runnable { load() }
@@ -127,8 +128,21 @@ class MainActivity : Activity() {
 
     private fun load() {
         handler.removeCallbacks(retry)
+        val target = url
+        if (target == null) {
+            askForAddress()
+            return
+        }
         loadFailed = false
-        web.loadUrl(url)
+        web.loadUrl(target)
+    }
+
+    // First start: explain where the address goes, and open the dialog right away.
+    private fun askForAddress() {
+        web.visibility = View.INVISIBLE
+        waiting.text = "Set your Mac's address to start.\n\nHold Back any time for this menu."
+        waiting.visibility = View.VISIBLE
+        handler.post { editUrl() }
     }
 
     private fun showWaiting() {
@@ -280,9 +294,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun editUrl() {
+    /** The address dialog. Saving something that isn't an address reopens it with the text kept. */
+    private fun editUrl(text: String? = url) {
         val input = EditText(this).apply {
-            setText(url)
+            setText(text.orEmpty())
+            setSelection(this.text.length) // type at the end, after what's there
+            hint = "192.168.1.20 (port 8765 is added)"
             setSingleLine()
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
         }
@@ -291,9 +308,11 @@ class MainActivity : Activity() {
             .setView(input)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Save") { _, _ ->
-                val normalized = MacUrl.normalize(input.text.toString())
+                val typed = input.text.toString()
+                val normalized = MacUrl.normalize(typed)
                 if (normalized == null) {
                     Toast.makeText(this, "That isn't a valid address", Toast.LENGTH_LONG).show()
+                    editUrl(typed)
                 } else {
                     prefs.edit().putString(PREF_URL, normalized).apply()
                     load()

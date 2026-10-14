@@ -5,8 +5,10 @@ import java.net.URISyntaxException
 
 /** The panel's address on the Mac, as typed in the escape menu. */
 object MacUrl {
-    const val DEFAULT = "http://192.168.1.62:8765/"
     private const val DEFAULT_PORT = 8765
+
+    /** The saved address to load at start, or null when the address still needs to be set. */
+    fun startUrl(saved: String?): String? = saved?.let { normalize(it) }
 
     /** Fills in what a person leaves out ("192.168.1.62" → full URL); null if it can't be a panel address. */
     fun normalize(input: String): String? {

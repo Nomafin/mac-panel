@@ -13,5 +13,7 @@ class MacUrlTest {
     @Test fun rejectsEmpty() = assertNull(MacUrl.normalize("   "))
     @Test fun rejectsMissingHost() = assertNull(MacUrl.normalize("http://"))
     @Test fun rejectsSpaces() = assertNull(MacUrl.normalize("my mac"))
-    @Test fun defaultIsNormal() = assertEquals(MacUrl.DEFAULT, MacUrl.normalize(MacUrl.DEFAULT))
+    @Test fun noSavedAddressMeansSetupFirst() = assertNull(MacUrl.startUrl(null))
+    @Test fun aBrokenSavedAddressMeansSetupFirst() = assertNull(MacUrl.startUrl("not a url"))
+    @Test fun aSavedAddressIsUsed() = assertEquals("http://192.168.1.70:8765/", MacUrl.startUrl("192.168.1.70"))
 }
