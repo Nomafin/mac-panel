@@ -1131,14 +1131,17 @@ function boot() {
     if (b) goToPage(Number(b.dataset.page));
   });
 
-  // Swipe between pages on the panel page. The map and pad use their gestures for dragging and
-  // drawing, so there the dots and Back switch pages.
+  // Swipe between pages: anywhere on the panel, and on the map's empty space (dragging a window
+  // moves it instead). The pad draws everywhere, so there the dots and Back switch pages.
   let swipe = null;
   let swallowClick = false;
+  function canSwipeFrom(target) {
+    if (currentPage === 0) return !openApp && !target.closest('input, .scrub, .vol');
+    if (currentPage === 1) return !target.closest('.mwin, .map-tools');
+    return false;
+  }
   pagesEl.addEventListener('pointerdown', (e) => {
-    swipe = null;
-    if (currentPage !== 0 || openApp || e.target.closest('input, .scrub, .vol')) return;
-    swipe = { x: e.clientX, y: e.clientY };
+    swipe = canSwipeFrom(e.target) ? { x: e.clientX, y: e.clientY } : null;
   });
   pagesEl.addEventListener('pointerup', (e) => {
     if (!swipe) return;

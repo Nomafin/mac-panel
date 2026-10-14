@@ -11,7 +11,7 @@ A Hammerspoon module that turns a spare Android tablet into an instant window sw
 - The bottom of the grid column shows the Mac's CPU, memory and MacBook battery (amber below 20% on battery).
 - Window previews in the sheet need *Screen Recording* for Hammerspoon (System Settings → Privacy & Security → Screen & System Audio Recording). Without it the cards just show titles.
 - **Pages**: swipe on the panel (or tap the dots at the bottom) to reach the **Screens** map and the **Sketch pad**; Back returns to the panel.
-  - Screens: your Mac's displays to scale with every window on the current Space. Drag a window to move it, drag its corner to resize, tap to focus; with a window selected, the buttons snap it to thirds/halves/centre/full or move it to the other screen.
+  - Screens (swipe on its empty space to change page): your Mac's displays to scale with every window on the current Space. Drag a window to move it, drag its corner to resize, tap to focus; with a window selected, the buttons snap it to thirds/halves/centre/full or move it to the other screen.
   - Sketch pad: draw or sign, then *Copy to Mac* puts it on the clipboard as black ink on a transparent PNG.
 - Above the status line, up to six buttons send keyboard shortcuts to the Mac's front app. Edit the sets in `tabletpanel/shortcuts.lua` and reload Hammerspoon.
 - Window changes come from `hs.window.filter` events (~50–100 ms to the tablet). Spotify changes come from Spotify's `PlaybackStateChanged` notification, plus a 2 s check for volume/shuffle/repeat changed inside Spotify.
