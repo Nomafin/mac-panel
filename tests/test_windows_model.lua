@@ -142,4 +142,14 @@ return function(T)
     T.eq(s.apps[1].windows[1].z, 2)
     T.eq(s.screens, { { id = 1, name = 'Odyssey', frame = { x = 0, y = 0, w = 7680, h = 2130 } } })
   end)
+
+  T.test('keeps an untitled normal-sized window (Edge web apps) under the app name', function()
+    local s = Model.new():build({ win(1, 'a.TweetDeck', '', { appName = 'TweetDeck', frame = { x = 0, y = 0, w = 1496, h = 1877 } }) })
+    T.eq(ids(s), { 1 })
+    T.eq(s.apps[1].windows[1].title, 'TweetDeck')
+  end)
+
+  T.test('still drops small untitled windows (helpers, popups)', function()
+    T.eq(ids(Model.new():build({ win(1, 'a.A', '', { frame = { x = 0, y = 0, w = 120, h = 40 } }) })), {})
+  end)
 end

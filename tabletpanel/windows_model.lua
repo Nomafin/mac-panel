@@ -17,6 +17,17 @@ local function seqFor(self, map, key)
   return map[key]
 end
 
+-- Untitled windows are usually invisible helpers, but Edge/Chrome web apps (TweetDeck) leave
+-- their real window untitled too; a normal-sized one is kept under the app's name.
+local MIN_UNTITLED_W, MIN_UNTITLED_H = 200, 150
+
+local function titleFor(w)
+  if w.title and w.title ~= '' then return w.title end
+  local f = w.frame
+  if f and f.w >= MIN_UNTITLED_W and f.h >= MIN_UNTITLED_H then return w.appName or w.bundleId end
+  return nil
+end
+
 -- raw: array of { id, title, bundleId, appName, appHidden, minimized, onCurrentSpace, standard }
 -- dock (optional): { pins = { {bundleId, name} } in Dock order, running = { {bundleId, name, hidden} },
 --                   screens = { {id, name, frame} } }
@@ -52,11 +63,12 @@ function Model:build(raw, focusedId, dock)
   for _, w in ipairs(raw) do
     -- Minimized windows can report a non-standard AX subrole (Finder on macOS 26),
     -- and panels/popups can't be minimized, so minimized counts as standard.
-    if w.id and w.bundleId and (w.standard or w.minimized) and w.title and w.title ~= '' then
+    local title = titleFor(w)
+    if w.id and w.bundleId and (w.standard or w.minimized) and title then
       seenWins[w.id] = true
       local app = seen(w.bundleId, w.appName, w.appHidden)
       app.windows[#app.windows + 1] = {
-        id = w.id, title = w.title, minimized = w.minimized == true,
+        id = w.id, title = title, minimized = w.minimized == true,
         otherSpace = not w.minimized and not w.appHidden and not w.onCurrentSpace,
         frame = w.frame, z = w.z, -- for the map page
         _seq = seqFor(self, self.winSeq, w.id),
