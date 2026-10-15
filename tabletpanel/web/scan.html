@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Scan Authenticator QR</title>
+  <!-- Opened by Hammerspoon (authenticator_ui.lua), which puts jsQR and scan.js in the two
+       placeholders below: the window has no server to fetch them from. -->
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #000; color: #eeeaf4; font: 15px/1.4 system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
+    .view { position: relative; flex: 1; min-height: 0; background: #111216; }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .frame { position: absolute; inset: 14% 24%; border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 18px; pointer-events: none; }
+    .status { margin: 0; padding: 14px 18px 16px; min-height: 3.4em; text-align: center; }
+    .status.error { color: #ffb86b; }
+    .status.done { color: #8be0a4; }
+  </style>
+</head>
+<body>
+  <div class="view">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="frame" aria-hidden="true"></div>
+  </div>
+  <p id="status" class="status" role="status"></p>
+  <script>/*JSQR*/</script>
+  <script type="module">/*SCAN*/</script>
+</body>
+</html>
