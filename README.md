@@ -1,6 +1,6 @@
 # Mac Panel
 
-Turn a spare Android tablet into a touch control panel for your Mac. It's a window switcher, Spotify remote, window mover and status display that sits next to your keyboard. The Mac pushes every change over a WebSocket, so the tablet updates the moment a window opens, closes or gets focus, or a track changes.
+Turn a spare Android tablet into a touch control panel for your Mac. It's a window switcher, Spotify remote, window mover, 2FA code copier and status display that sits next to your keyboard. The Mac pushes every change over a WebSocket, so the tablet updates the moment a window opens, closes or gets focus, or a track changes.
 
 Two parts:
 
@@ -18,8 +18,9 @@ It's built and tested with a Samsung Galaxy Tab S2 (Android 7) and a MacBook wit
 - **Shortcut buttons**: up to six buttons send keyboard shortcuts to the Mac's front app. Edit the sets in [`tabletpanel/shortcuts.lua`](tabletpanel/shortcuts.lua).
 - **Microphone mute**: while an app uses the Mac's microphone (a call), a mic button appears next to the clock. It and the tablet's Recents key mute and unmute.
 - **Status**: the clock, the date and the tablet's battery above the grid. The Mac's CPU, memory and battery (on laptops) are below it.
-- **Screens page** (swipe left): your displays to scale, with every window on the current Space. Drag a window to move it, drag its corner to resize, tap to focus. With a window selected, buttons snap it to thirds, halves, the centre or full screen, or move it to another screen.
-- **Sketch pad** (swipe again): draw or sign, then *Copy to Mac* puts the drawing on the clipboard as a transparent PNG.
+- **Screens page** (swipe left from the panel): your displays to scale, with every window on the current Space. Drag a window to move it, drag its corner to resize, tap to focus. With a window selected, buttons snap it to thirds, halves, the centre or full screen, or move it to another screen.
+- **Authenticator** (swipe right from the panel): your 2FA accounts, imported from Google Authenticator. Tap one and its current code is on the Mac's clipboard, ready to paste; the clipboard is cleared 30 s later if it still holds the code. With 3 s or less left on a code, the next one is copied instead. See [Authenticator](#authenticator).
+- **Sketch pad** (swipe left from Screens): draw or sign, then *Copy to Mac* puts the drawing on the clipboard as a transparent PNG.
 - **Follows the Mac**: the tablet goes black when the Mac's display sleeps, the Mac locks or the screensaver starts. It comes back when the Mac wakes. Tap the black screen to see the panel for a minute.
 
 ## Security: read this first
@@ -28,7 +29,8 @@ It's built and tested with a Samsung Galaxy Tab S2 (Android 7) and a MacBook wit
 
 - see your window titles, app list and Spotify state, and (with Screen Recording granted) **screenshots of your windows**;
 - focus, move, resize and launch apps, and send the configured keyboard shortcuts to the front app;
-- put an image on your clipboard, mute the microphone and control Spotify.
+- put an image on your clipboard, mute the microphone and control Spotify;
+- see the names of your 2FA accounts and put a code on the Mac's clipboard (but not read it: the codes and secrets never leave the Mac).
 
 So the server only runs while the Mac is on your home network, which it recognizes by the router's MAC address (`homeRouterMACs`). Don't use it on networks you share with people you don't trust.
 
@@ -63,6 +65,22 @@ So the server only runs while the Mac is on your home network, which it recogniz
 10. **Give the Mac a fixed IP**: in your router's DHCP settings, reserve an address for the Mac (`ipconfig getifaddr en0` shows the current one). The panel is at `http://<that-ip>:8765/`.
 
 Open that address in a desktop browser to try the panel before setting up the tablet.
+
+## Authenticator
+
+The 2FA secrets are stored in your login Keychain (items named *Mac Panel authenticator*, service `mac-panel.authenticator`) and the codes are computed on the Mac. The tablet only ever gets the account names. Importing, renaming and removing happen on the Mac only, from the lock icon in the menu bar.
+
+**Import from Google Authenticator**:
+
+1. On your phone, in Google Authenticator: menu → *Transfer accounts* → *Export accounts*, and pick the accounts. It shows one QR code, or a series (*1 of 3*) for many accounts.
+2. On the Mac: lock icon in the menu bar → *Scan Authenticator QR…*. The first time, macOS asks to let Hammerspoon use the camera.
+3. Hold the phone up to the camera. For a series, show each code in turn; the window says how many parts are in, and closes itself when all are imported.
+
+Single-account `otpauth://` QR codes, the ones websites show when you turn on 2FA, can be scanned the same way. Accounts already imported are skipped, so scanning again is harmless. Counter-based (HOTP) accounts aren't supported and are skipped.
+
+**Manage**: lock icon → *Manage accounts…* → pick one → *Rename…* or *Remove…*.
+
+The codes on your phone keep working: exporting doesn't move the accounts, it copies them. Keep in mind that the secrets then live on the same Mac as your passwords, as with any desktop authenticator.
 
 ## Configuration
 
@@ -114,7 +132,7 @@ Menu names below are from Samsung's Android 7. Other tablets have the same setti
 
 ### Using the app
 
-- It starts at boot, and Home, Back and Recents all keep you on the panel. Back closes the window sheet or returns from the other pages. Recents mutes the Mac's microphone during a call. The volume keys do nothing (many tablet covers press them).
+- It starts at boot, and Home, Back and Recents all keep you on the panel. Back closes the window sheet or returns to the panel from the other pages. Recents mutes the Mac's microphone during a call. The volume keys do nothing (many tablet covers press them).
 - **Escape menu**: hold Back for about 1.5 seconds. It has *Reload*, *Mac address…*, *Android settings* and *Choose home app* (to go back to the normal launcher).
 - If the Mac can't be reached, the app shows *Waiting for your Mac…* and retries every 5 s. After 30 s without a connection (e.g. the Mac is asleep) the screen goes black until the Mac is back.
 - While the tablet is on its charger, ▴ or ▾ next to its battery shows whether the level actually rose or fell over the last 30 minutes. It turns amber if the level falls while charging, which means the charger can't keep up.
@@ -149,6 +167,9 @@ If the tablet's Play Store has no Chrome 111+ update, you can sideload one, e.g.
 | Gradle fails with just a Java version number (e.g. `27`) | Gradle is running on a too-new Java: `export JAVA_HOME=$(/usr/libexec/java_home -v 17)`. |
 | Home doesn't offer *Mac Panel* | Android remembered another home app: *Settings → Apps → Default apps → Home screen* → Mac Panel. |
 | Tablet stays lit while the Mac sleeps | `curl -s http://<mac-ip>:8765/api/state \| jq .display` should say `"awake": false` while the Mac is locked. Debug the page from the Mac in Chrome at `chrome://inspect` (debug builds allow it). |
+| Scanner says *No camera access* | System Settings → Privacy & Security → Camera → turn Hammerspoon on, then open the scanner again. |
+| Scanner doesn't react to the export code | Hold the phone 20–30 cm from the camera and turn its screen brightness up; a large export code is dense. |
+| Authenticator page is empty after an import | Check the Hammerspoon console for `tabletpane: authenticator:` warnings (e.g. the Keychain item couldn't be read). |
 | Icons missing | `curl -o x.png http://localhost:8765/icon/com.apple.finder.png && file x.png` should say PNG. |
 
 ## Development
@@ -184,4 +205,4 @@ On the page, `web/js/main.js` wires the features together. Each feature is a mod
 
 ## License
 
-[MIT](LICENSE). The bundled [Bricolage Grotesque](https://github.com/ateliertriay/bricolage) font is under the [SIL Open Font License](tabletpanel/web/fonts/OFL.txt).
+[MIT](LICENSE). The bundled [Bricolage Grotesque](https://github.com/ateliertriay/bricolage) font is under the [SIL Open Font License](tabletpanel/web/fonts/OFL.txt), and [jsQR](https://github.com/cozmo/jsQR) under the [Apache License 2.0](tabletpanel/web/vendor/jsQR-LICENSE).
