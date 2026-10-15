@@ -1,0 +1,64 @@
+/* ---------- Authenticator page: 2FA accounts; a tap copies the code on the Mac ---------- */
+.auth-page { display: flex; flex-direction: column; }
+
+/* The 30-second countdown shared by nearly every account: drains from the right. */
+.auth-bar { flex: none; height: 3px; margin: 14px 20px 0; border-radius: 2px; background: rgba(238, 234, 244, 0.08); overflow: hidden; }
+.auth-bar i { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 0.25s linear; }
+
+.auth-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-content: start;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px 34px; /* bottom: room for the page dots */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.auth-list::-webkit-scrollbar { display: none; }
+
+.acct {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 76px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(21, 22, 27, 0.86);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  transition: background 0.2s, transform 0.25s var(--ease-spring), box-shadow 0.3s;
+}
+.acct:active { background: var(--plate-hi); transform: scale(0.97); }
+.acct.copied { box-shadow: inset 0 0 0 2px var(--accent); }
+.acct.shake { animation: shake 0.42s; }
+
+.acct-badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: hsl(var(--hue), 45%, 32%);
+  color: hsl(var(--hue), 80%, 88%);
+  font-size: 21px;
+  font-weight: 700;
+}
+.acct-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.acct-text b, .acct-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-text b { font-size: 18px; font-weight: 650; }
+.acct-text span { color: var(--dim); font-size: 14px; }
+.acct-note { flex: none; color: var(--accent); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Accounts with a period other than 30 s get their own countdown ring. */
+.acct-ring { position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; transform: rotate(-90deg); }
+.acct-ring circle { fill: none; stroke: var(--dim); stroke-width: 3; stroke-dasharray: 50.27; transition: stroke-dashoffset 0.25s linear; }
+
+.auth-empty { margin: auto; padding: 0 40px 40px; max-width: 30em; color: var(--dim); font-size: 17px; line-height: 1.5; text-align: center; }
+.auth-empty b { color: var(--ink); font-weight: 600; }

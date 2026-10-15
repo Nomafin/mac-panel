@@ -8,4 +8,6 @@ test('mockState variants', () => {
   assert.equal(mockState('').spotify.state, 'playing');
   assert.ok(mockState('').windows.apps.length >= 3);
   assert.equal(mockState('').display.awake, true);
+  assert.ok(mockState('').authenticator.accounts.length >= 3);
+  assert.ok(mockState('').authenticator.accounts.every((a) => !('secret' in a)));
 });

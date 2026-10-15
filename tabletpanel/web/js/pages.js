@@ -1,5 +1,7 @@
-// The three pages — panel, screens map, sketch pad — with dots, swipes and Back to switch.
-const PAGES = 3;
+// The pages — Authenticator, panel, screens map, sketch pad — with dots, swipes and Back to switch.
+// The panel is the start page; the Authenticator is to its left.
+export const PAGE = { auth: 0, panel: 1, map: 2, pad: 3 };
+const PAGES = 4;
 
 // Page swipe: 1 = next page (finger moved left), -1 = previous, 0 = not a swipe.
 export function swipeDirection(dx, dy) {
@@ -10,15 +12,16 @@ export function swipeDirection(dx, dy) {
 export function initPages(ctx) {
   const pagesEl = ctx.$('pages');
   const dotsEl = ctx.$('page-dots');
-  let current = 0;
+  let current = PAGE.panel;
 
   function goTo(n) {
     current = Math.max(0, Math.min(PAGES - 1, n));
     pagesEl.style.transform = `translateX(${-current * 100}vw)`;
     dotsEl.querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.page) === current));
-    if (current !== 0) ctx.sheet.close();
-    if (current === 1) ctx.map.show();
-    if (current === 2) ctx.pad.show();
+    if (current !== PAGE.panel) ctx.sheet.close();
+    if (current === PAGE.auth) ctx.auth.show();
+    if (current === PAGE.map) ctx.map.show();
+    if (current === PAGE.pad) ctx.pad.show();
   }
 
   dotsEl.addEventListener('click', (e) => {
@@ -32,8 +35,9 @@ export function initPages(ctx) {
   let swallowClick = false;
 
   function canSwipeFrom(target) {
-    if (current === 0) return !ctx.sheet.isOpen() && !target.closest('input, .scrub, .vol');
-    if (current === 1) return !target.closest('.mwin, .map-tools');
+    if (current === PAGE.panel) return !ctx.sheet.isOpen() && !target.closest('input, .scrub, .vol');
+    if (current === PAGE.map) return !target.closest('.mwin, .map-tools');
+    if (current === PAGE.auth) return true; // a swipe that ends on a tile doesn't count as a tap
     return false;
   }
 
@@ -53,6 +57,10 @@ export function initPages(ctx) {
     if (swallowClick) { e.stopPropagation(); e.preventDefault(); }
   }, true);
 
-  goTo(0);
+  // The panel is in the middle, so the first move there mustn't slide across on load.
+  pagesEl.style.transition = 'none';
+  goTo(PAGE.panel);
+  void pagesEl.offsetWidth;
+  pagesEl.style.transition = '';
   return { goTo, current: () => current };
 }

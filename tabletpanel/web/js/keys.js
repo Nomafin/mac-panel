@@ -1,10 +1,11 @@
 // The tablet's hardware keys, which the Android app passes in as `tablet-key` events.
+import { PAGE } from './pages.js';
 
 // What a hardware key does. Volume keys never wake the screen: the cover can hold them down.
-export function keyAction(key, { layerOpen, asleep, micInUse, page = 0 }) {
+export function keyAction(key, { layerOpen, asleep, micInUse, page = PAGE.panel }) {
   if (asleep) return key === 'back' || key === 'home' || key === 'recents' ? 'peek' : null;
   if (key === 'back' && layerOpen) return 'closeLayer';
-  if (key === 'back' && page !== 0) return 'panel';
+  if (key === 'back' && page !== PAGE.panel) return 'panel';
   if (key === 'recents' && micInUse) return 'toggleMic'; // a physical mute key during calls
   return null;
 }
@@ -20,7 +21,7 @@ export function initKeys(ctx) {
     if (action === 'closeLayer') ctx.sheet.close();
     else if (action === 'peek') ctx.sleep.peek();
     else if (action === 'toggleMic') ctx.mic.toggle();
-    else if (action === 'panel') ctx.pages.goTo(0);
+    else if (action === 'panel') ctx.pages.goTo(PAGE.panel);
   });
 
   // Dev aid: in mock mode the "d" key toggles the Mac's awake state.

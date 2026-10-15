@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/pages.css">
   <link rel="stylesheet" href="css/map.css">
   <link rel="stylesheet" href="css/pad.css">
+  <link rel="stylesheet" href="css/auth.css">
   <link rel="stylesheet" href="css/grid.css">
   <link rel="stylesheet" href="css/status.css">
   <link rel="stylesheet" href="css/music.css">
@@ -22,7 +23,12 @@
     <div class="glow" id="glow-b"></div>
   </div>
   <div id="pages" class="pages">
-  <div class="page">
+  <section id="auth-page" class="page auth-page" aria-label="Authenticator">
+    <div id="auth-bar" class="auth-bar" aria-hidden="true"><i></i></div>
+    <div id="auth-list" class="auth-list"></div>
+    <p id="auth-empty" class="auth-empty" hidden>No accounts yet. On the Mac: lock icon in the menu bar → <b>Scan Authenticator QR…</b></p>
+  </section>
+  <div class="page panel-page">
   <div id="shell" class="shell no-spotify">
     <main id="windows" class="windows">
       <div id="stage" class="stage">
@@ -59,9 +65,10 @@
   </section>
   </div>
   <nav id="page-dots" class="page-dots" aria-label="Pages">
-    <button data-page="0" aria-label="Panel"></button>
-    <button data-page="1" aria-label="Screens"></button>
-    <button data-page="2" aria-label="Sketch pad"></button>
+    <button data-page="0" aria-label="Authenticator"></button>
+    <button data-page="1" aria-label="Panel"></button>
+    <button data-page="2" aria-label="Screens"></button>
+    <button data-page="3" aria-label="Sketch pad"></button>
   </nav>
   <div id="layer" class="layer" hidden>
     <div id="layer-backdrop" class="layer-backdrop"></div>

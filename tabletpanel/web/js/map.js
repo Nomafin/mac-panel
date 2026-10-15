@@ -2,6 +2,7 @@
 // drag the corner to resize, tap to focus; the preset buttons snap the selected window.
 import { esc, makeThrottle, shake } from './util.js';
 import { allWindowIds } from './shots.js';
+import { PAGE } from './pages.js';
 
 const SHOT_REFRESH_MS = 15000; // each capture briefly blocks Hammerspoon, so not too often
 const MOVE_THROTTLE_MS = 150; // each move makes the Mac rebuild and push the window list
@@ -112,7 +113,7 @@ export function initMap(ctx) {
   }
 
   function renderMap() {
-    if (ctx.pages.current() !== 1 || map.drag) return;
+    if (ctx.pages.current() !== PAGE.map || map.drag) return;
     const screens = ctx.store.windows && ctx.store.windows.screens;
     if (!screens || !screens.length) { mapEl.innerHTML = ''; return; }
     const box = mapEl.getBoundingClientRect();
@@ -200,8 +201,8 @@ export function initMap(ctx) {
     });
   });
 
-  setInterval(() => { if (ctx.pages.current() === 1 && !ctx.sleep.isAsleep()) refreshShots(); }, SHOT_REFRESH_MS);
-  window.addEventListener('resize', () => { if (ctx.pages.current() === 1) renderMap(); });
+  setInterval(() => { if (ctx.pages.current() === PAGE.map && !ctx.sleep.isAsleep()) refreshShots(); }, SHOT_REFRESH_MS);
+  window.addEventListener('resize', () => { if (ctx.pages.current() === PAGE.map) renderMap(); });
   ctx.on('windows', renderMap);
 
   return { show: () => { renderMap(); refreshShots(); } };

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { keyAction } from '../../tabletpanel/web/js/keys.js';
+import { PAGE } from '../../tabletpanel/web/js/pages.js';
 
 test('keyAction: back closes the sheet, navigation keys peek while dark, volume keys do nothing', () => {
   assert.equal(keyAction('back', { layerOpen: true, asleep: false }), 'closeLayer');
@@ -19,7 +20,8 @@ test('keyAction: Recents toggles the mic during a call, and only then', () => {
 });
 
 test('keyAction: Back returns to the panel from the other pages', () => {
-  assert.equal(keyAction('back', { layerOpen: false, asleep: false, page: 1 }), 'panel');
-  assert.equal(keyAction('back', { layerOpen: true, asleep: false, page: 0 }), 'closeLayer');
-  assert.equal(keyAction('back', { layerOpen: false, asleep: false, page: 0 }), null);
+  assert.equal(keyAction('back', { layerOpen: false, asleep: false, page: PAGE.map }), 'panel');
+  assert.equal(keyAction('back', { layerOpen: false, asleep: false, page: PAGE.auth }), 'panel');
+  assert.equal(keyAction('back', { layerOpen: true, asleep: false, page: PAGE.panel }), 'closeLayer');
+  assert.equal(keyAction('back', { layerOpen: false, asleep: false, page: PAGE.panel }), null);
 });

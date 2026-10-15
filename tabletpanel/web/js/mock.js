@@ -50,6 +50,13 @@ export function mockState(variant) {
     badges: { items: [{ bundleId: 'com.tinyspeck.slackmacgap', label: '3' }, { bundleId: 'com.apple.mail', label: '12' }] },
     mic: { available: true, name: 'MacBook Pro Microphone', inUse: true, muted: false },
     settings: { timeFormat: 'H:i' },
+    authenticator: { accounts: [
+      { id: 'm1', issuer: 'GitHub', name: 'octocat', period: 30 },
+      { id: 'm2', issuer: 'AWS', name: 'root', period: 30 },
+      { id: 'm3', issuer: 'Google', name: 'me@example.com', period: 30 },
+      { id: 'm4', issuer: 'Hetzner', name: 'admin', period: 60 },
+      { id: 'm5', issuer: '', name: 'backup server', period: 30 },
+    ] },
     system: { cpu: 12, memory: 63, battery: { level: 84, onPower: true, charging: true } },
   };
 }
@@ -95,6 +102,20 @@ export class MockSocket {
         const f = { 'left-third': [0, 1 / 3], 'middle-third': [1 / 3, 1 / 3], 'right-third': [2 / 3, 1 / 3], 'left-half': [0, 0.5],
           'right-half': [0.5, 0.5], center: [1 / 6, 2 / 3], max: [0, 1] }[args.preset];
         if (f) win.frame = { x: Math.round(-7680 + 7680 * f[0]), y: -285, w: Math.round(7680 * f[1]), h: 2130 };
+      }
+    } else if (msg.cmd === 'authenticator.copy') {
+      // Like the Mac: copied at once, the clipboard cleared 30 s later.
+      const auth = this.state.authenticator;
+      if (!auth.accounts.some((a) => a.id === args.id)) Object.assign(reply, { ok: false, error: 'unknown_account' });
+      else {
+        const seq = ((auth.copied && auth.copied.seq) || 0) + 1;
+        auth.copied = { id: args.id, seq, status: 'copied' };
+        setTimeout(() => {
+          if (!auth.copied || auth.copied.seq !== seq) return;
+          delete auth.copied;
+          this.v += 1;
+          if (this.onmessage) this.onmessage({ data: JSON.stringify(this.stateMsg('authenticator')) });
+        }, 30000);
       }
     } else if (msg.cmd === 'mic.set') {
       this.state.mic.muted = args.muted === true;

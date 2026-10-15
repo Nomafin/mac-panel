@@ -1,5 +1,6 @@
 // The sketch pad: draw or sign with a finger, then put it on the Mac's clipboard as an image.
 import { shake } from './util.js';
+import { PAGE } from './pages.js';
 
 const INK_WIDTH = 3.5;
 const CROP_MARGIN = 12;
@@ -109,6 +110,6 @@ export function initPad(ctx) {
     ctx.send('pad.copy', { png }).then((r) => padMessage(r.ok ? 'Copied — paste it on the Mac' : 'Couldn\'t copy to the Mac'));
   });
 
-  window.addEventListener('resize', () => { if (ctx.pages.current() === 2) sizePad(); });
+  window.addEventListener('resize', () => { if (ctx.pages.current() === PAGE.pad) sizePad(); });
   return { show: sizePad };
 }

@@ -14,6 +14,7 @@ import { initStatus } from './status.js';
 import { initShortcuts } from './shortcuts.js';
 import { initMap } from './map.js';
 import { initPad } from './pad.js';
+import { initAuth } from './auth.js';
 import { initPages } from './pages.js';
 import { initKeys } from './keys.js';
 import { browserShots } from './shots.js';
@@ -25,7 +26,7 @@ const ctx = {
   MOCK: params.has('mock'),
   mockVariant: params.get('mock'),
   $: (id) => document.getElementById(id),
-  store: { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, shortcuts: null, settings: null, spotifyAt: 0 },
+  store: { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, shortcuts: null, settings: null, authenticator: null, spotifyAt: 0 },
   connected: false,
   on(event, fn) { (listeners[event] = listeners[event] || []).push(fn); },
   emit(event) { (listeners[event] || []).forEach((fn) => fn()); },
@@ -43,6 +44,7 @@ initStatus(ctx);
 initShortcuts(ctx);
 ctx.map = initMap(ctx);
 ctx.pad = initPad(ctx);
+ctx.auth = initAuth(ctx);
 ctx.pages = initPages(ctx); // last: it shows the first page, which uses the others
 initKeys(ctx);
 
