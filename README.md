@@ -19,7 +19,7 @@ It's built and tested with a Samsung Galaxy Tab S2 (Android 7) and a MacBook wit
 - **Microphone mute**: while an app uses the Mac's microphone (a call), a mic button appears next to the clock. It and the tablet's Recents key mute and unmute.
 - **Status**: the clock, the date and the tablet's battery above the grid. The Mac's CPU, memory and battery (on laptops) are below it.
 - **Screens page** (swipe left from the panel): your displays to scale, with every window on the current Space. Drag a window to move it, drag its corner to resize, tap to focus. With a window selected, buttons snap it to thirds, halves, the centre or full screen, or move it to another screen.
-- **Authenticator** (swipe right from the panel): your 2FA accounts, imported from Google Authenticator. Tap one and its current code is on the Mac's clipboard, ready to paste; the clipboard is cleared 30 s later if it still holds the code. With 3 s or less left on a code, the next one is copied instead. See [Authenticator](#authenticator).
+- **Authenticator** (swipe right from the panel): your 2FA accounts, imported from Google Authenticator. Tap one and its current code is on the Mac's clipboard, ready to paste; the clipboard is cleared 30 s later if it still holds the code, and the code is marked concealed so clipboard managers skip it. With 3 s or less left on a code, the next one is copied instead. See [Authenticator](#authenticator).
 - **Sketch pad** (swipe left from Screens): draw or sign, then *Copy to Mac* puts the drawing on the clipboard as a transparent PNG.
 - **Follows the Mac**: the tablet goes black when the Mac's display sleeps, the Mac locks or the screensaver starts. It comes back when the Mac wakes. Tap the black screen to see the panel for a minute.
 

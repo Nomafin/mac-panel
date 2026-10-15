@@ -72,7 +72,14 @@ A.deps = {
   readKeychain = readKeychain,
   writeKeychain = writeKeychain,
   deleteKeychain = function() deleteParts(1) end,
-  setClipboard = function(s) hs.pasteboard.setContents(s) end,
+  -- Marked concealed and transient (nspasteboard.org), so clipboard managers don't keep the code.
+  setClipboard = function(s)
+    hs.pasteboard.writeAllData({
+      ['public.utf8-plain-text'] = s,
+      ['org.nspasteboard.ConcealedType'] = '',
+      ['org.nspasteboard.TransientType'] = '',
+    })
+  end,
   getClipboard = function() return hs.pasteboard.getContents() end,
   clearClipboard = function() hs.pasteboard.clearContents() end,
   now = function() return hs.timer.secondsSinceEpoch() end,
