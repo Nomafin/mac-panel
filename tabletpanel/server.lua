@@ -11,7 +11,9 @@ local TYPES = {
   html = 'text/html; charset=utf-8',
   css = 'text/css; charset=utf-8',
   js = 'application/javascript; charset=utf-8',
+  woff2 = 'font/woff2',
 }
+local FOLDERS = { js = 'js', css = 'css', fonts = 'woff2' } -- folder -> the one extension it serves
 
 local function readFile(path)
   local f = io.open(path, 'rb')
@@ -32,17 +34,20 @@ function Server:route(method, path)
   if method ~= 'GET' then return 'method not allowed', 405, PLAIN end
   local clean = path:match('^[^?#]*')
 
-  -- The page itself, plus its scripts and styles: /js/<name>.js and /css/<name>.css, where the
-  -- name is letters, digits and dashes only (no dots, so no way out of the folder).
+  -- The page itself, plus its scripts, styles and fonts: /js/<name>.js, /css/<name>.css and
+  -- /fonts/<name>.woff2, where the name is letters, digits and dashes only (no dots, so no way
+  -- out of the folder).
   local file = STATIC[clean]
   if not file then
-    local dir, name, ext = clean:match('^/(%a+)/([%w%-]+)%.(%a+)$')
-    if (dir == 'js' and ext == 'js') or (dir == 'css' and ext == 'css') then file = dir .. '/' .. name .. '.' .. ext end
+    local dir, name, ext = clean:match('^/(%a+)/([%w%-]+)%.(%w+)$')
+    if dir and FOLDERS[dir] == ext then file = dir .. '/' .. name .. '.' .. ext end
   end
   if file then
     local body = self.opts.readFile(self.opts.webDir .. file)
     if not body then return 'not found', 404, PLAIN end
-    return body, 200, { ['Content-Type'] = TYPES[file:match('%.(%w+)$')], ['Cache-Control'] = 'no-store' }
+    local ext = file:match('%.(%w+)$')
+    -- Fonts never change; the page's own files must update on the next reload.
+    return body, 200, { ['Content-Type'] = TYPES[ext], ['Cache-Control'] = ext == 'woff2' and 'max-age=86400' or 'no-store' }
   end
 
   if clean == '/api/state' then

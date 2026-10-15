@@ -1,6 +1,7 @@
 -- Tablet control panel: serves the tablet UI and pushes Mac state to it over a WebSocket.
 -- Usage in ~/.hammerspoon/init.lua:
 --   tabletpanel = require("tabletpanel").start({ homeRouterMACs = { "aa:bb:cc:dd:ee:ff" } })
+-- Every key of M.config can be set there.
 local Hub = require('tabletpanel.hub')
 local Server = require('tabletpanel.server')
 local netguard = require('tabletpanel.netguard')
@@ -12,12 +13,16 @@ local mic = require('tabletpanel.mic')
 local system = require('tabletpanel.system')
 local shortcutButtons = require('tabletpanel.shortcut_buttons')
 local pad = require('tabletpanel.pad')
+local Settings = require('tabletpanel.settings')
 
 local M = {}
 
 M.config = {
   port = 8765,
   homeRouterMACs = {}, -- empty = netguard disabled, server always on
+  -- The tablet's clock, in PHP date() letters (H, G, h, g, i, A, a; d, j, D, m, n, M, Y, y).
+  timeFormat = 'H:i',  -- e.g. 'g:i A' for 9:05 AM
+  dateFormat = nil,    -- e.g. 'd.m.Y' or 'D, M j'; nil = the tablet's language decides
 }
 
 local DIR = debug.getinfo(1, 'S').source:match('^@(.*/)')
@@ -26,7 +31,7 @@ local log = hs.logger.new('tabletpanel', 'info')
 function M.start(overrides)
   for k, v in pairs(overrides or {}) do M.config[k] = v end
 
-  M.modules = { windows, spotify, display, badges, mic, system, shortcutButtons, pad }
+  M.modules = { windows, spotify, display, badges, mic, system, shortcutButtons, pad, Settings.new(M.config) }
   local server
   local hub = Hub.new({
     send = function(message) server:send(message) end,

@@ -2,9 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { batteryTone, batteryTrend, formatClock, macStats } from '../../tabletpanel/web/js/status.js';
 
-test('formatClock gives 24-hour time and a Finnish d.m.Y date', () => {
-  assert.deepEqual(formatClock(new Date(2026, 9, 14, 9, 5)), { time: '09:05', date: '14.10.2026' });
-  assert.deepEqual(formatClock(new Date(2026, 2, 5, 23, 59)), { time: '23:59', date: '05.03.2026' });
+test('formatClock follows the configured time and date formats', () => {
+  const fi = { timeFormat: 'H:i', dateFormat: 'd.m.Y' };
+  assert.deepEqual(formatClock(new Date(2026, 9, 14, 9, 5), fi), { time: '09:05', date: '14.10.2026' });
+  assert.deepEqual(formatClock(new Date(2026, 2, 5, 23, 59), fi), { time: '23:59', date: '05.03.2026' });
+  const us = { timeFormat: 'g:i A', dateFormat: 'D, M j' };
+  assert.deepEqual(formatClock(new Date(2026, 2, 5, 0, 7), us), { time: '12:07 AM', date: 'Thu, Mar 5' });
+  assert.deepEqual(formatClock(new Date(2026, 2, 5, 13, 30), { timeFormat: 'h:i a', dateFormat: 'n/j/y' }),
+    { time: '01:30 pm', date: '3/5/26' });
+  // A backslash keeps the next character as it is.
+  assert.equal(formatClock(new Date(2026, 2, 5), { dateFormat: '\\d\\a\\y j' }).date, 'day 5');
+});
+
+test('formatClock defaults to 24-hour time and the device locale\'s date', () => {
+  const d = new Date(2026, 2, 5, 9, 5);
+  assert.deepEqual(formatClock(d), { time: '09:05', date: d.toLocaleDateString() });
+  assert.deepEqual(formatClock(d, {}), { time: '09:05', date: d.toLocaleDateString() });
 });
 
 test('batteryTrend compares the oldest and newest level of the last 30 minutes', () => {

@@ -10,7 +10,7 @@ object MacUrl {
     /** The saved address to load at start, or null when the address still needs to be set. */
     fun startUrl(saved: String?): String? = saved?.let { normalize(it) }
 
-    /** Fills in what a person leaves out ("192.168.1.62" → full URL); null if it can't be a panel address. */
+    /** Fills in what a person leaves out ("192.168.1.20" → full URL); null if it can't be a panel address. */
     fun normalize(input: String): String? {
         val trimmed = input.trim()
         if (trimmed.isEmpty() || trimmed.any { it.isWhitespace() }) return null

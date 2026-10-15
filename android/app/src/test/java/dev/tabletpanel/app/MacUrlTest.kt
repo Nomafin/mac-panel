@@ -5,7 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class MacUrlTest {
-    @Test fun addsSchemePortAndSlash() = assertEquals("http://192.168.1.62:8765/", MacUrl.normalize("192.168.1.62"))
+    @Test fun addsSchemePortAndSlash() = assertEquals("http://192.168.1.20:8765/", MacUrl.normalize("192.168.1.20"))
     @Test fun keepsGivenPort() = assertEquals("http://mac.local:9000/", MacUrl.normalize("http://mac.local:9000"))
     @Test fun keepsPathAndQueryAndTrims() = assertEquals("http://h:1/x?mock", MacUrl.normalize("  http://h:1/x?mock "))
     @Test fun lowercasesScheme() = assertEquals("https://h:8765/", MacUrl.normalize("HTTPS://h"))

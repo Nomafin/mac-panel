@@ -1,6 +1,7 @@
 {
   "name": "tabletpanel",
   "private": true,
+  "license": "MIT",
   "description": "A spare Android tablet as a touch control panel for your Mac (Hammerspoon + a small Android app).",
   "type": "module",
   "scripts": {

@@ -7,10 +7,44 @@ const BATTERY_POLL_MS = 60000;
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
-export function formatClock(d) {
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// The letters PHP's date() uses for the same things; any other character is kept as it is.
+const TOKENS = {
+  d: (d) => pad2(d.getDate()),
+  j: (d) => String(d.getDate()),
+  D: (d) => DAYS[d.getDay()],
+  m: (d) => pad2(d.getMonth() + 1),
+  n: (d) => String(d.getMonth() + 1),
+  M: (d) => MONTHS[d.getMonth()],
+  Y: (d) => String(d.getFullYear()),
+  y: (d) => pad2(d.getFullYear() % 100),
+  H: (d) => pad2(d.getHours()),
+  G: (d) => String(d.getHours()),
+  h: (d) => pad2(d.getHours() % 12 || 12),
+  g: (d) => String(d.getHours() % 12 || 12),
+  i: (d) => pad2(d.getMinutes()),
+  A: (d) => (d.getHours() < 12 ? 'AM' : 'PM'),
+  a: (d) => (d.getHours() < 12 ? 'am' : 'pm'),
+};
+
+function formatDate(d, format) {
+  let out = '';
+  for (let i = 0; i < format.length; i++) {
+    const c = format[i];
+    if (c === '\\' && i + 1 < format.length) out += format[++i];
+    else out += TOKENS[c] ? TOKENS[c](d) : c;
+  }
+  return out;
+}
+
+// formats: the Mac's settings ({ timeFormat, dateFormat }); without a date format the date
+// follows the tablet's language.
+export function formatClock(d, formats = {}) {
   return {
-    time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
-    date: `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`,
+    time: formatDate(d, formats.timeFormat || 'H:i'),
+    date: formats.dateFormat ? formatDate(d, formats.dateFormat) : d.toLocaleDateString(),
   };
 }
 
@@ -53,7 +87,7 @@ export function initStatus(ctx) {
   const battery = { samples: [], plugged: null };
 
   function tickClock() {
-    const { time, date } = formatClock(new Date());
+    const { time, date } = formatClock(new Date(), ctx.store.settings || {});
     if (timeEl.textContent !== time) timeEl.textContent = time;
     if (dateEl.textContent !== date) dateEl.textContent = date;
   }
@@ -95,4 +129,5 @@ export function initStatus(ctx) {
   tickBattery();
   setInterval(tickBattery, BATTERY_POLL_MS);
   ctx.on('system', renderSystem);
+  ctx.on('settings', tickClock);
 }

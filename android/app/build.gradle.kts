@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.tabletpanel.app"
-        minSdk = 24 // Android 7.0, the Galaxy Tab S2's last official release
+        minSdk = 24 // Android 7.0: old tablets are the point
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"

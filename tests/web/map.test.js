@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { clampToScreens, fromMap, mapFit, toMap } from '../../tabletpanel/web/js/map.js';
 
 const SCREENS = [
-  { id: 3, name: 'Odyssey', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
+  { id: 3, name: 'External', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
   { id: 1, name: 'Built-in', frame: { x: 0, y: 57, w: 2992, h: 1877 } },
 ];
 

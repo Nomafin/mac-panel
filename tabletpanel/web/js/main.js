@@ -25,7 +25,7 @@ const ctx = {
   MOCK: params.has('mock'),
   mockVariant: params.get('mock'),
   $: (id) => document.getElementById(id),
-  store: { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, shortcuts: null, spotifyAt: 0 },
+  store: { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, shortcuts: null, settings: null, spotifyAt: 0 },
   connected: false,
   on(event, fn) { (listeners[event] = listeners[event] || []).push(fn); },
   emit(event) { (listeners[event] || []).forEach((fn) => fn()); },

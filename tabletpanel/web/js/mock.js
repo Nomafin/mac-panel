@@ -19,7 +19,7 @@ export function mockState(variant) {
     windows: {
       focusedId: 11,
       screens: [
-        { id: 3, name: 'Odyssey G95NC', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
+        { id: 3, name: 'External Display', frame: { x: -7680, y: -285, w: 7680, h: 2130 } },
         { id: 1, name: 'Built-in Display', frame: { x: 0, y: 57, w: 2992, h: 1877 } },
       ],
       apps: [
@@ -49,6 +49,7 @@ export function mockState(variant) {
     ] },
     badges: { items: [{ bundleId: 'com.tinyspeck.slackmacgap', label: '3' }, { bundleId: 'com.apple.mail', label: '12' }] },
     mic: { available: true, name: 'MacBook Pro Microphone', inUse: true, muted: false },
+    settings: { timeFormat: 'H:i' },
     system: { cpu: 12, memory: 63, battery: { level: 84, onPower: true, charging: true } },
   };
 }

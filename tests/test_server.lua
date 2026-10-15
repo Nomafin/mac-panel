@@ -7,6 +7,7 @@ local function make()
     ['/web/js/main.js'] = 'console.log(1)',
     ['/web/js/map-page.js'] = 'export {}',
     ['/web/css/base.css'] = 'body{}',
+    ['/web/fonts/bricolage-latin.woff2'] = 'wOF2',
   }
   local icons = { ['com.apple.Safari'] = '\137PNG\r\n\26\n' }
   return Server.new({
@@ -41,10 +42,18 @@ return function(T)
     T.eq(select(2, s:route('GET', '/js/map-page.js')), 200)
   end)
 
+  T.test('serves woff2 fonts, cached for a day', function()
+    local body, status, headers = make():route('GET', '/fonts/bricolage-latin.woff2')
+    T.eq({ body, status }, { 'wOF2', 200 })
+    T.eq(headers['Content-Type'], 'font/woff2')
+    T.eq(headers['Cache-Control'], 'max-age=86400')
+  end)
+
   T.test('only whitelisted files are served', function()
     local s = make()
     for _, path in ipairs({ '/missing.js', '/../init.lua', '/%2e%2e/init.lua', '/web/js/main.js', '/init.lua',
-      '/js/../init.lua', '/js/main.css', '/css/base.js', '/js/sub/x.js', '/js/.hidden.js', '/js/missing.js' }) do
+      '/js/../init.lua', '/js/main.css', '/css/base.js', '/js/sub/x.js', '/js/.hidden.js', '/js/missing.js',
+      '/fonts/OFL.txt', '/fonts/x.js', '/js/x.woff2', '/fonts/../init.woff2' }) do
       local _, status = s:route('GET', path)
       T.eq(status, 404, path)
     end
