@@ -73,10 +73,13 @@ The 2FA secrets are stored in your login Keychain (items named *Mac Panel authen
 **Import from Google Authenticator**:
 
 1. On your phone, in Google Authenticator: menu → *Transfer accounts* → *Export accounts*, and pick the accounts. It shows one QR code, or a series (*1 of 3*) for many accounts.
-2. On the Mac: lock icon in the menu bar → *Scan Authenticator QR…*. The first time, macOS asks to let Hammerspoon use the camera.
-3. Hold the phone up to the camera. For a series, show each code in turn; the window says how many parts are in, and closes itself when all are imported.
+2. Take a screenshot of the code and get it onto the Mac's clipboard: on an iPhone, copy it and it arrives through Universal Clipboard; or AirDrop it and copy it on the Mac.
+3. On the Mac: lock icon in the menu bar → *Import QR from clipboard*. macOS reads the code (with its Vision framework, nothing leaves the Mac), the accounts are saved, and the clipboard is cleared. For a series, repeat for each code.
+4. **Delete the screenshot** from your phone (and *Recently Deleted*): it holds every secret.
 
-Single-account `otpauth://` QR codes, the ones websites show when you turn on 2FA, can be scanned the same way. Accounts already imported are skipped, so scanning again is harmless. Counter-based (HOTP) accounts aren't supported and are skipped.
+Single-account `otpauth://` QR codes, the ones websites show when you turn on 2FA, can be imported the same way. Accounts already imported are skipped, so importing again is harmless. Counter-based (HOTP) accounts aren't supported and are skipped.
+
+*Scan QR with camera…* reads a code held up to the Mac's webcam instead (macOS asks for camera access the first time). It works for small codes, but a webcam usually can't focus well enough on a phone screen for a full export code, so the screenshot route is the reliable one. Android's Google Authenticator may block screenshots of the export screen; then the camera, or a photo taken with another device, are the options.
 
 **Manage**: lock icon → *Manage accounts…* → pick one → *Rename…* or *Remove…*.
 
@@ -168,7 +171,7 @@ If the tablet's Play Store has no Chrome 111+ update, you can sideload one, e.g.
 | Home doesn't offer *Mac Panel* | Android remembered another home app: *Settings → Apps → Default apps → Home screen* → Mac Panel. |
 | Tablet stays lit while the Mac sleeps | `curl -s http://<mac-ip>:8765/api/state \| jq .display` should say `"awake": false` while the Mac is locked. Debug the page from the Mac in Chrome at `chrome://inspect` (debug builds allow it). |
 | Scanner says *No camera access* | System Settings → Privacy & Security → Camera → turn Hammerspoon on, then open the scanner again. |
-| Scanner doesn't react to the export code | Hold the phone 20–30 cm from the camera and turn its screen brightness up; a large export code is dense. |
+| Camera scanner doesn't react to the export code | Webcams rarely focus well enough on a dense code; use *Import QR from clipboard* with a screenshot instead. |
 | Authenticator page is empty after an import | Check the Hammerspoon console for `tabletpane: authenticator:` warnings (e.g. the Keychain item couldn't be read). |
 | Icons missing | `curl -o x.png http://localhost:8765/icon/com.apple.finder.png && file x.png` should say PNG. |
 

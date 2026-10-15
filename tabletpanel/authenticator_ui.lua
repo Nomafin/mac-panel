@@ -72,6 +72,40 @@ function UI.openScanner()
   hs.focus()
 end
 
+local function shellQuote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
+
+-- The QR codes in the clipboard's image, read by macOS's Vision framework (qr_decode.js). The
+-- image never goes to a file; the codes come back through a pipe.
+local function clipboardCodes()
+  local p = io.popen('/usr/bin/osascript -l JavaScript ' .. shellQuote(DIR .. 'qr_decode.js') .. ' 2>/dev/null')
+  local out = p:read('a')
+  p:close()
+  local ok, codes = pcall(json.decode, out)
+  if not ok or type(codes) ~= 'table' then return nil, 'decode_failed' end
+  if codes.error then return nil, codes.error end
+  return codes
+end
+
+-- A screenshot of Google Authenticator's export screen (or of a website's 2FA QR code), copied to
+-- the Mac's clipboard. The clipboard is cleared afterwards: the screenshot holds the secrets.
+function UI.importFromClipboard()
+  local codes, err = clipboardCodes()
+  local message
+  if not codes then
+    message = err == 'no_image' and 'Copy a screenshot of the QR code to the clipboard first.'
+      or "The clipboard's image couldn't be read."
+  else
+    local total = mod.importTexts(codes)
+    message = mod.importSummary(total) .. '.'
+    if total.imported + total.duplicates + total.skipped > 0 then
+      hs.pasteboard.clearContents()
+      message = message .. '\n\nThe screenshot is off the clipboard now. Delete it from your phone and Photos too: it holds the secrets.'
+    end
+  end
+  hs.focus()
+  hs.dialog.blockAlert('Import from clipboard', message)
+end
+
 local function renameAccount(account)
   hs.focus()
   local button, issuer = hs.dialog.textPrompt('Rename account', 'Service (for example GitHub):', account.issuer, 'Next', 'Cancel')
@@ -123,7 +157,8 @@ function UI.start(authenticator)
   menu:setMenu(function()
     local n = #mod.list()
     return {
-      { title = 'Scan Authenticator QR…', fn = UI.openScanner },
+      { title = 'Import QR from clipboard', fn = function() hs.timer.doAfter(0.1, UI.importFromClipboard) end },
+      { title = 'Scan QR with camera…', fn = UI.openScanner },
       { title = 'Manage accounts…', fn = UI.openManager, disabled = n == 0 },
       { title = '-' },
       { title = n == 1 and '1 account' or (n .. ' accounts'), disabled = true },

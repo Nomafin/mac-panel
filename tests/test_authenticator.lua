@@ -143,6 +143,27 @@ return function(T)
     T.ok(#env.logs > 0)
   end)
 
+  T.test('importing several codes at once adds up the results', function()
+    local A = setup(stored({ GITHUB }))
+    local r = A.importTexts({
+      'otpauth://totp/AWS:admin?secret=MZXW6YTBOI',
+      'otpauth://totp/GitHub:me?secret=JBSWY3DPEHPK3PXP',
+      'https://example.com',
+    })
+    T.eq(r, { imported = 1, duplicates = 1, skipped = 0, failed = 1, codes = 3, error = 'not_otp' })
+    T.eq(#A.list(), 2)
+  end)
+
+  T.test('importSummary says what happened in plain words', function()
+    local A = setup(nil)
+    T.eq(A.importSummary({ imported = 3, duplicates = 0, skipped = 0, failed = 0, codes = 1 }), 'Imported 3 accounts')
+    T.eq(A.importSummary({ imported = 1, duplicates = 2, skipped = 1, failed = 0, codes = 2 }),
+      'Imported 1 account (2 already here, 1 counter-based skipped)')
+    T.eq(A.importSummary({ imported = 0, duplicates = 2, skipped = 0, failed = 0, codes = 1 }), 'No new accounts (2 already here)')
+    T.eq(A.importSummary({ imported = 0, duplicates = 0, skipped = 0, failed = 1, codes = 1 }), "That's not an authenticator QR code")
+    T.eq(A.importSummary({ imported = 0, duplicates = 0, skipped = 0, failed = 0, codes = 0 }), 'No QR code found in the image')
+  end)
+
   T.test('import reports text that is not a 2FA link', function()
     local A = setup(nil)
     T.eq(A.importText('https://example.com'), { ok = false, error = 'not_otp' })

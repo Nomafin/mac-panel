@@ -96,19 +96,31 @@ function startScanner() {
     }
   };
 
+  // Counts only (never the codes), for checking from the Hammerspoon console.
+  const stats = window.scanStats = { ticks: 0, frames: 0, found: 0, sent: 0, ms: 0, size: '', error: '' };
+
   function scan() {
+    stats.ticks += 1;
+    try { scanFrame(); } catch (e) { stats.error = String(e); }
+  }
+
+  function scanFrame() {
     if (finished || busy || video.readyState < 2) return;
     const w = video.videoWidth;
     const h = video.videoHeight;
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     g.drawImage(video, 0, 0, w, h);
+    const t0 = Date.now();
     const code = window.jsQR(g.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
+    Object.assign(stats, { frames: stats.frames + 1, ms: Date.now() - t0, size: `${w}x${h}` });
     if (!code || !code.data) return;
+    stats.found += 1;
     const now = Date.now();
     if (code.data === last.text && now - last.at < SAME_TEXT_MS) return;
     last = { text: code.data, at: now };
     busy = true;
+    stats.sent += 1;
     post({ type: 'text', text: code.data });
   }
 

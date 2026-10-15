@@ -257,6 +257,41 @@ function A.importText(text)
     batchIndex = parsed.batchIndex, batchSize = parsed.batchSize, batchId = parsed.batchId }
 end
 
+-- Several codes at once (e.g. every QR code found in a screenshot), added up.
+function A.importTexts(texts)
+  local total = { imported = 0, duplicates = 0, skipped = 0, failed = 0, codes = #texts }
+  for _, text in ipairs(texts) do
+    local r = A.importText(text)
+    if r.ok then
+      total.imported = total.imported + r.imported
+      total.duplicates = total.duplicates + r.duplicates
+      total.skipped = total.skipped + r.skipped
+    else
+      total.failed = total.failed + 1
+      total.error = total.error or r.error
+    end
+  end
+  return total
+end
+
+local function plural(n, word) return n .. ' ' .. word .. (n == 1 and '' or 's') end
+
+function A.importSummary(t)
+  if t.codes == 0 then return 'No QR code found in the image' end
+  local notes = {}
+  if t.duplicates > 0 then notes[#notes + 1] = t.duplicates .. ' already here' end
+  if t.skipped > 0 then notes[#notes + 1] = t.skipped .. ' counter-based skipped' end
+  if t.failed > 0 and t.failed < t.codes then notes[#notes + 1] = plural(t.failed, 'other QR code') .. ' ignored' end
+  local extra = #notes > 0 and (' (' .. table.concat(notes, ', ') .. ')') or ''
+  if t.imported > 0 then return 'Imported ' .. plural(t.imported, 'account') .. extra end
+  if t.failed == t.codes then
+    if t.error == 'keychain_unreadable' then return "The saved accounts can't be read from the Keychain" end
+    if t.error == 'save_failed' then return "Couldn't save to the Keychain" end
+    return "That's not an authenticator QR code"
+  end
+  return 'No new accounts' .. extra
+end
+
 local function change(id, apply)
   if not readable then return false end
   local account, index = find(id)
