@@ -47,7 +47,11 @@ function UI.openScanner()
     local body = msg.body
     if type(body) ~= 'table' or not scanner then return end
     if body.type == 'text' and type(body.text) == 'string' then
-      local result = mod.importText(body.text)
+      local ok, result = pcall(mod.importText, body.text)
+      if not ok then
+        hs.printf('tabletpanel: authenticator: import failed: %s', tostring(result))
+        result = { ok = false, error = 'internal' }
+      end
       scanner:evaluateJavaScript('window.scanResult(' .. json.encode(result) .. ')')
     elseif body.type == 'close' then
       hs.timer.doAfter(0, UI.closeScanner) -- not from inside the webview's own callback

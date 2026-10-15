@@ -86,6 +86,11 @@ return function(T)
     T.eq({ M.parseOtpauth('otpauth://totp/x?issuer=a') }, { nil, 'invalid' })
     T.eq({ M.parseOtpauth('otpauth://totp/x?secret=not*base32') }, { nil, 'invalid' })
     T.eq({ M.parseOtpauth('otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&digits=7') }, { nil, 'invalid' })
+    for _, bad in ipairs({ 'period=1e400', 'period=0.5', 'period=2.5', 'period=99999', 'digits=8.5' }) do
+      T.eq({ M.parseOtpauth('otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&' .. bad) }, { nil, 'invalid' }, bad)
+    end
+    -- "6.0" is six: kept as a whole number, so codes are zero-padded, not space-padded
+    T.eq(math.type(M.parseOtpauth('otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&digits=6.0').digits), 'integer')
   end)
 
   T.test('migration: decodes accounts, skips HOTP, reads the batch fields', function()
@@ -106,6 +111,28 @@ return function(T)
   T.test('migration: a name with another issuer prefix is kept as it is', function()
     local payload = field(1, otp({ secret = 'abcdefghij', name = 'Other:me', issuer = 'GitHub' }))
     T.eq(M.parseMigration(migrationUri(payload)).accounts[1].name, 'Other:me')
+  end)
+
+  T.test('migration: fields of the wrong type are invalid, not a crash', function()
+    local wrongName = field(1, field(1, 'abcdefghij') .. field(2, 5) .. field(3, 7))
+    local wrongBatch = field(1, otp({ secret = 'abcdefghij', name = 'me' })) .. field(3, 'x') .. field(5, 'y')
+    local wrongSecret = field(1, field(1, 3) .. field(2, 'me'))
+    local emptySecret = field(1, otp({ secret = '', name = 'me' }))
+    for _, payload in ipairs({ wrongName, wrongBatch, wrongSecret, emptySecret }) do
+      T.eq({ M.parseMigration(migrationUri(payload)) }, { nil, 'invalid' })
+    end
+  end)
+
+  T.test('migration: a literal + in the data is base64, not a space', function()
+    local secret, b64
+    for pad = 0, 2 do -- a secret whose payload's base64 has a + in it (0xfbefbe is '++++' when aligned)
+      secret = string.rep('a', pad) .. string.rep('\251\239\190', 3)
+      b64 = M.base64Encode(field(1, otp({ secret = secret, name = 'plus' })))
+      if b64:find('+', 1, true) then break end
+    end
+    T.ok(b64:find('+', 1, true), 'test payload needs a +')
+    local r = M.parseMigration('otpauth-migration://offline?data=' .. b64)
+    T.eq(r.accounts[1].secret, M.base32Encode(secret))
   end)
 
   T.test('migration: garbage is invalid', function()

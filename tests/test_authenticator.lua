@@ -108,6 +108,41 @@ return function(T)
     T.eq(env.writes, 0)
   end)
 
+  T.test('a save that fails puts the previous Keychain value back', function()
+    local A, env = setup(stored({ GITHUB }))
+    local before = env.keychain
+    local written = {}
+    A.deps.writeKeychain = function(s)
+      written[#written + 1] = s
+      if #written == 1 then env.keychain = 'half-written'; return false end
+      env.keychain = s
+      return true
+    end
+    local r = A.importText('otpauth://totp/AWS:admin?secret=MZXW6YTBOI')
+    T.eq(r, { ok = false, error = 'save_failed' })
+    T.eq(written[2], before)
+    T.eq(env.keychain, before)
+    T.eq(#A.list(), 1)
+  end)
+
+  T.test('a failed first save removes the half-written item', function()
+    local A, env = setup(nil)
+    local deleted = false
+    A.deps.writeKeychain = function(s) env.keychain = s:sub(1, 5); return false end
+    A.deps.deleteKeychain = function() deleted = true; env.keychain = nil end
+    T.eq(A.importText('otpauth://totp/AWS:admin?secret=MZXW6YTBOI').ok, false)
+    T.ok(deleted)
+    T.eq(#A.list(), 0)
+  end)
+
+  T.test('a save that throws is a failed save, not a crash', function()
+    local A, env = setup(stored({ GITHUB }))
+    A.deps.writeKeychain = function() error('security tool missing') end
+    T.eq(A.importText('otpauth://totp/AWS:admin?secret=MZXW6YTBOI'), { ok = false, error = 'save_failed' })
+    T.eq(#A.list(), 1)
+    T.ok(#env.logs > 0)
+  end)
+
   T.test('import reports text that is not a 2FA link', function()
     local A = setup(nil)
     T.eq(A.importText('https://example.com'), { ok = false, error = 'not_otp' })

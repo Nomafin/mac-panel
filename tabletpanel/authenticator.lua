@@ -38,6 +38,15 @@ end
 
 -- `security -i` reads the commands from stdin, so the secrets never show up in a process list.
 -- The value is base64, which needs no quoting there. Read back to be sure it was saved.
+local function deleteParts(from)
+  local n = from
+  while readPart(n) do
+    os.execute(string.format('/usr/bin/security delete-generic-password -s %s -a accounts.%d >/dev/null 2>&1',
+      shellQuote(A.keychainService), n))
+    n = n + 1
+  end
+end
+
 local function writeKeychain(value)
   local p = io.popen('/usr/bin/security -i >/dev/null 2>&1', 'w')
   local count = math.max(1, math.ceil(#value / CHUNK))
@@ -46,12 +55,7 @@ local function writeKeychain(value)
       A.keychainService, n, value:sub((n - 1) * CHUNK + 1, n * CHUNK)))
   end
   p:close()
-  local n = count + 1 -- parts left over from a longer list
-  while readPart(n) do
-    os.execute(string.format('/usr/bin/security delete-generic-password -s %s -a accounts.%d >/dev/null 2>&1',
-      shellQuote(A.keychainService), n))
-    n = n + 1
-  end
+  deleteParts(count + 1) -- parts left over from a longer list
   return readKeychain() == value
 end
 
@@ -62,11 +66,12 @@ local function randomId()
   return (bytes:gsub('.', function(c) return string.format('%02x', c:byte()) end))
 end
 
-A.keychain = { read = readKeychain, write = writeKeychain } -- for checking against the real Keychain
+A.keychain = { read = readKeychain, write = writeKeychain, delete = function() deleteParts(1) end } -- for checking against the real Keychain
 
 A.deps = {
   readKeychain = readKeychain,
   writeKeychain = writeKeychain,
+  deleteKeychain = function() deleteParts(1) end,
   setClipboard = function(s) hs.pasteboard.setContents(s) end,
   getClipboard = function() return hs.pasteboard.getContents() end,
   clearClipboard = function() hs.pasteboard.clearContents() end,
@@ -82,6 +87,7 @@ A.deps = {
 
 local accounts = {}
 local readable = true -- false when the Keychain item exists but can't be read: never overwrite it
+local lastSaved -- the Keychain value as last read or written, to put back if a save fails halfway
 local notify, log = function() end, nil
 local copied, seq = nil, 0
 local waitTimer, clearTimer, pendingClear
@@ -92,12 +98,14 @@ end
 
 local function valid(a)
   return type(a) == 'table' and type(a.id) == 'string' and type(a.secret) == 'string'
-    and Otp.base32Decode(a.secret) ~= nil and type(a.period) == 'number' and a.period > 0
-    and (a.digits == 6 or a.digits == 8) and type(a.algorithm) == 'string'
+    and a.secret ~= '' and Otp.base32Decode(a.secret) ~= nil
+    and math.tointeger(a.period) and a.period > 0 and a.period <= 3600
+    and (a.digits == 6 or a.digits == 8)
+    and (a.algorithm == 'SHA1' or a.algorithm == 'SHA256' or a.algorithm == 'SHA512')
 end
 
 local function load()
-  accounts, readable = {}, true
+  accounts, readable, lastSaved = {}, true, nil
   local stored, err = A.deps.readKeychain()
   if not stored then
     if err ~= 'missing' then
@@ -113,16 +121,31 @@ local function load()
     warn('the Keychain item ' .. A.keychainService .. ' is not readable; leaving it untouched')
     return
   end
+  lastSaved = stored
   for _, a in ipairs(list) do
     if valid(a) then
       accounts[#accounts + 1] = { id = a.id, issuer = tostring(a.issuer or ''), name = tostring(a.name or ''),
-        secret = a.secret, algorithm = a.algorithm, digits = a.digits, period = a.period }
+        secret = a.secret, algorithm = a.algorithm, digits = math.tointeger(a.digits), period = math.tointeger(a.period) }
     end
   end
 end
 
+-- A save that fails (maybe halfway through the parts) puts the previous value back, so the
+-- Keychain never keeps a mix of old and new parts.
 local function save()
-  return A.deps.writeKeychain(Otp.base64Encode(json.encode(json.array(accounts))))
+  local ok, saved = pcall(function()
+    local value = Otp.base64Encode(json.encode(json.array(accounts)))
+    if A.deps.writeKeychain(value) then return value end
+  end)
+  if ok and saved then
+    lastSaved = saved
+    return true
+  end
+  warn('saving to the Keychain failed' .. (ok and '' or ': ' .. tostring(saved)))
+  pcall(function()
+    if lastSaved then A.deps.writeKeychain(lastSaved) else A.deps.deleteKeychain() end
+  end)
+  return false
 end
 
 local function find(id)

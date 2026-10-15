@@ -64,14 +64,19 @@ function M.base64Encode(bytes)
   return s .. string.rep('=', (4 - #s % 4) % 4)
 end
 
+local function percentDecode(s)
+  return (s:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end))
+end
+
+-- Form decoding (+ is a space), for labels.
 function M.urlDecode(s)
-  return (s:gsub('+', ' '):gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end))
+  return percentDecode(s:gsub('+', ' '))
 end
 
 local function query(uri)
   local params = {}
   for k, v in (uri:match('%?(.*)$') or ''):gmatch('([^&=]+)=([^&]*)') do
-    params[M.urlDecode(k):lower()] = M.urlDecode(v)
+    params[percentDecode(k):lower()] = percentDecode(v) -- a URI query: + is a + (base64 has them)
   end
   return params
 end
@@ -90,13 +95,13 @@ function M.parseOtpauth(uri)
   local labelIssuer, name = label:match('^([^:]*):%s*(.*)$')
   if not labelIssuer then name = label end
   local algorithm = (p.algorithm or 'SHA1'):upper()
-  local digits = tonumber(p.digits or '6')
-  local period = tonumber(p.period or '30')
-  if not ALGORITHMS[algorithm] or (digits ~= 6 and digits ~= 8) or not period or period < 1 then
+  local digits = math.tointeger(tonumber(p.digits or '6'))
+  local period = math.tointeger(tonumber(p.period or '30'))
+  if not ALGORITHMS[algorithm] or (digits ~= 6 and digits ~= 8) or not period or period < 1 or period > 3600 then
     return nil, 'invalid'
   end
   return { issuer = p.issuer or labelIssuer or '', name = name, secret = secret,
-    algorithm = algorithm, digits = digits, period = math.floor(period) }
+    algorithm = algorithm, digits = digits, period = period }
 end
 
 -- Protobuf: the fields of one message as { [number] = { values… } }; nil if malformed.
@@ -136,7 +141,7 @@ local function readMessage(s)
 end
 
 local function int32(n)
-  n = (n or 0) & 0xffffffff
+  n = (n or 0) & 0xffffffff -- callers check n is an integer
   return n >= 0x80000000 and n - 0x100000000 or n
 end
 
@@ -149,27 +154,39 @@ function M.parseMigration(uri)
   local bytes = data and M.base64Decode(data)
   local payload = bytes and readMessage(bytes)
   if not payload then return nil, 'invalid' end
-  local accounts, skipped = {}, 0
-  for _, raw in ipairs(payload[1] or {}) do
-    local p = type(raw) == 'string' and readMessage(raw)
-    if not p or type((p[1] or {})[1]) ~= 'string' then return nil, 'invalid' end
-    local first = function(n) return (p[n] or {})[1] end
-    local algorithm = MIGRATION_ALGORITHMS[first(4) or 0]
-    if first(6) == 1 or not algorithm then -- HOTP (counter-based), or MD5
-      skipped = skipped + 1
-    else
-      local issuer, name = first(3) or '', first(2) or ''
-      if issuer ~= '' and name:sub(1, #issuer + 1) == issuer .. ':' then
-        name = name:sub(#issuer + 2):gsub('^%s+', '')
-      end
-      accounts[#accounts + 1] = { issuer = issuer, name = name, secret = M.base32Encode(first(1)),
-        algorithm = algorithm, digits = MIGRATION_DIGITS[first(5) or 0] or 6, period = 30 }
-    end
+  -- Every field must have the type the format says, or the payload is not Google's.
+  local function fieldOf(fields, n, kind)
+    local v = (fields[n] or {})[1]
+    if v ~= nil and math.type(v) ~= kind and type(v) ~= kind then error('wrong type', 0) end
+    return v
   end
-  local first = function(n) return (payload[n] or {})[1] end
-  return { accounts = accounts, skipped = skipped, batchIndex = int32(first(4)),
-    batchSize = math.max(1, int32(first(3))), batchId = int32(first(5)) }
+  local ok, result = pcall(function()
+    local accounts, skipped = {}, 0
+    for _, raw in ipairs(payload[1] or {}) do
+      local p = type(raw) == 'string' and readMessage(raw)
+      if not p then error('bad account', 0) end
+      local secret = fieldOf(p, 1, 'string')
+      local name, issuer = fieldOf(p, 2, 'string') or '', fieldOf(p, 3, 'string') or ''
+      local alg, digits, kind = fieldOf(p, 4, 'integer') or 0, fieldOf(p, 5, 'integer') or 0, fieldOf(p, 6, 'integer') or 0
+      if not secret or secret == '' then error('no secret', 0) end
+      local algorithm = MIGRATION_ALGORITHMS[alg]
+      if kind == 1 or not algorithm then -- HOTP (counter-based), or MD5
+        skipped = skipped + 1
+      else
+        if issuer ~= '' and name:sub(1, #issuer + 1) == issuer .. ':' then
+          name = name:sub(#issuer + 2):gsub('^%s+', '')
+        end
+        accounts[#accounts + 1] = { issuer = issuer, name = name, secret = M.base32Encode(secret),
+          algorithm = algorithm, digits = MIGRATION_DIGITS[digits] or 6, period = 30 }
+      end
+    end
+    return { accounts = accounts, skipped = skipped, batchIndex = int32(fieldOf(payload, 4, 'integer')),
+      batchSize = math.max(1, int32(fieldOf(payload, 3, 'integer'))), batchId = int32(fieldOf(payload, 5, 'integer')) }
+  end)
+  if not ok then return nil, 'invalid' end
+  return result
 end
+
 
 -- Whatever the scanner read: a Google export link or a single-account link.
 function M.parseImport(text)
