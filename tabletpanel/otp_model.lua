@@ -195,9 +195,10 @@ end
 local LAST_SECONDS = 3
 
 function M.copyTiming(unixSeconds, period)
-  local left = period - unixSeconds % period
+  local nextStart = (unixSeconds // period + 1) * period -- exact, so the next code is never missed
+  local left = nextStart - unixSeconds
   if left > LAST_SECONDS then return { wait = 0, at = unixSeconds } end
-  return { wait = left, at = unixSeconds + left }
+  return { wait = left, at = nextStart }
 end
 
 function M.sameAccount(a, b)
