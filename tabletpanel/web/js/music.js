@@ -1,4 +1,5 @@
-// The Spotify panel, and the album art as the page's only light: its glow and accent colour.
+// The Spotify panel, and the album art as the page's only light: its colours for the ribbons (or
+// the glow, without WebGL) and the accent.
 import { makeThrottle } from './util.js';
 
 const DEFAULT_ACCENT = '#9db4ff';
@@ -38,9 +39,19 @@ export function rgbToHsl(r, g, b) {
   return [h * 60, s, l];
 }
 
-// The album's accent: the hue family with the most saturated mid-tone weight, lifted so it
-// reads on black. Returns null for greyscale art.
-export function pickAccent(rgba) {
+// The album's colours, strongest first: hue families weighted by saturated mid-tones, lifted so
+// they read on black. A family too small or too close to one already picked is passed over, and
+// art with a single hue gets its neighbours. Returns null for greyscale art.
+const MIN_SHARE = 0.15; // of the strongest family's weight
+const MIN_HUE_GAP = 40;
+const NEIGHBOUR = 28;
+
+function hueGap(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
+export function pickPalette(rgba, count = 3) {
   const buckets = Array.from({ length: 12 }, () => ({ w: 0, x: 0, y: 0, s: 0 }));
   const pixelCount = rgba.length / 4;
   let total = 0;
@@ -54,11 +65,30 @@ export function pickAccent(rgba) {
     b.w += w; b.x += Math.cos(rad) * w; b.y += Math.sin(rad) * w; b.s += sat * w;
     total += w;
   }
-  const best = buckets.reduce((a, b) => (b.w > a.w ? b : a));
-  if (best.w === 0 || total / pixelCount < 0.02) return null;
-  let hue = (Math.atan2(best.y, best.x) * 180) / Math.PI;
-  if (hue < 0) hue += 360;
-  return { h: hue, s: Math.min(0.85, Math.max(0.45, best.s / best.w)), l: 0.68 };
+  const ranked = buckets.filter((b) => b.w > 0).sort((a, b) => b.w - a.w);
+  if (!ranked.length || total / pixelCount < 0.02) return null;
+  const colour = (b) => {
+    let hue = (Math.atan2(b.y, b.x) * 180) / Math.PI;
+    if (hue < 0) hue += 360;
+    return { h: hue, s: Math.min(0.85, Math.max(0.45, b.s / b.w)), l: 0.68 };
+  };
+  const palette = [];
+  for (const b of ranked) {
+    if (palette.length === count || b.w < ranked[0].w * MIN_SHARE) break;
+    const c = colour(b);
+    if (palette.every((p) => hueGap(p.h, c.h) >= MIN_HUE_GAP)) palette.push(c);
+  }
+  const main = palette[0];
+  for (let i = 1; palette.length < count; i++) {
+    const side = i % 2 ? 1 : -1;
+    palette.push({ ...main, h: (main.h + side * NEIGHBOUR * Math.ceil(i / 2) + 360) % 360 });
+  }
+  return palette;
+}
+
+export function pickAccent(rgba) {
+  const palette = pickPalette(rgba, 1);
+  return palette ? palette[0] : null;
 }
 
 export function accentCss(a) {
@@ -136,11 +166,13 @@ export function initMusic(ctx) {
         c.width = c.height = 24;
         const g = c.getContext('2d');
         g.drawImage(img, 0, 0, 24, 24);
-        const accent = pickAccent(g.getImageData(0, 0, 24, 24).data);
-        if (url === shownArtUrl) setAccent(accent && accentCss(accent));
-      } catch (_) { setAccent(null); }
+        const palette = pickPalette(g.getImageData(0, 0, 24, 24).data);
+        if (url !== shownArtUrl) return;
+        setAccent(palette && accentCss(palette[0]));
+        ctx.ribbons.setPalette(palette);
+      } catch (_) { setAccent(null); ctx.ribbons.setPalette(null); }
     };
-    img.onerror = () => setAccent(null);
+    img.onerror = () => { setAccent(null); ctx.ribbons.setPalette(null); };
     img.src = url;
   }
 
@@ -163,6 +195,7 @@ export function initMusic(ctx) {
       img.removeAttribute('src');
       reveal();
       setAccent(null);
+      ctx.ribbons.setPalette(null);
       return;
     }
     img.onload = reveal;
@@ -188,11 +221,13 @@ export function initMusic(ctx) {
     spEl.classList.toggle('idle', running && !hasTrack);
     document.body.classList.toggle('playing', hasTrack && sp.state === 'playing');
     document.body.classList.toggle('has-music', hasTrack);
+    ctx.ribbons.setMood(!hasTrack ? 'idle' : sp.state === 'playing' ? 'playing' : 'paused');
     if (!hasTrack) {
       glows.forEach((g) => g.classList.remove('on'));
       shownArtUrl = null;
       shownTrackId = null;
       setAccent(null);
+      ctx.ribbons.setPalette(null);
       return;
     }
 

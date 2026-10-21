@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accentCss, estimatePosition, formatTime, pickAccent, rgbToHsl, seekFraction } from '../../tabletpanel/web/js/music.js';
+import { accentCss, estimatePosition, formatTime, pickAccent, pickPalette, rgbToHsl, seekFraction } from '../../tabletpanel/web/js/music.js';
 
 function pixels(...rgbs) {
   const out = [];
@@ -57,4 +57,27 @@ test('pickAccent returns null for greyscale art', () => {
 
 test('accentCss formats an hsl colour', () => {
   assert.equal(accentCss({ h: 210.4, s: 0.8, l: 0.68 }), 'hsl(210 80% 68%)');
+});
+
+test('pickPalette gives the main hue first, then the next strong hue family', () => {
+  const palette = pickPalette(pixels([200, 40, 40, 30], [40, 60, 220, 12], [20, 20, 20, 30]));
+  assert.equal(palette.length, 3);
+  assert.deepEqual(palette[0], pickAccent(pixels([200, 40, 40, 30], [40, 60, 220, 12], [20, 20, 20, 30])));
+  assert.ok(palette[1].h > 220 && palette[1].h < 240, 'blue second: ' + palette[1].h);
+});
+
+test('pickPalette ignores a hue family too small to matter', () => {
+  const palette = pickPalette(pixels([200, 40, 40, 60], [40, 60, 220, 1]));
+  palette.forEach((c) => assert.ok(c.h < 40 || c.h > 320, 'stays near red: ' + c.h));
+});
+
+test('pickPalette spreads single-hue art into three distinct neighbouring colours', () => {
+  const palette = pickPalette(pixels([10, 20, 90, 50]));
+  assert.equal(palette.length, 3);
+  assert.equal(new Set(palette.map(accentCss)).size, 3);
+  palette.forEach((c) => assert.ok(c.h > 190 && c.h < 270, 'blue family: ' + c.h));
+});
+
+test('pickPalette returns null for greyscale art', () => {
+  assert.equal(pickPalette(pixels([30, 30, 30, 20], [200, 200, 200, 20])), null);
 });
