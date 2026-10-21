@@ -59,9 +59,9 @@
 .mic.muted { background: #c8423b; color: #fff; }
 .mic.muted .slash { opacity: 1; }
 
-/* Buttons for the Mac's front app. */
-.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 12px; }
-.actions:empty { display: none; }
+/* Buttons for the Mac's front app. One row of room is kept even with no buttons, so the grid
+   doesn't jump when the front app changes. */
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 12px; min-height: 52px; }
 .action {
   height: 40px;
   padding: 0 16px;
