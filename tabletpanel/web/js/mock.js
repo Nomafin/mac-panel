@@ -49,6 +49,7 @@ export function mockState(variant) {
     ] },
     badges: { items: [{ bundleId: 'com.tinyspeck.slackmacgap', label: '3' }, { bundleId: 'com.apple.mail', label: '12' }] },
     mic: { available: true, name: 'MacBook Pro Microphone', inUse: true, muted: false },
+    monitor: { available: true, current: 17, inputs: [{ label: 'Mac', code: 17 }, { label: 'PC', code: 18 }] },
     settings: { timeFormat: 'H:i' },
     authenticator: { accounts: [
       { id: 'm1', issuer: 'GitHub', name: 'octocat', period: 30 },
@@ -117,6 +118,15 @@ export class MockSocket {
           if (this.onmessage) this.onmessage({ data: JSON.stringify(this.stateMsg('authenticator')) });
         }, 30000);
       }
+    } else if (msg.cmd === 'monitor.set') {
+      // Like the Mac: the monitor reports the new input a moment later.
+      const mon = this.state.monitor;
+      if (!mon.inputs.some((i) => i.code === args.code)) Object.assign(reply, { ok: false, error: 'unknown_input' });
+      else setTimeout(() => {
+        mon.current = args.code;
+        this.v += 1;
+        if (this.onmessage) this.onmessage({ data: JSON.stringify(this.stateMsg('monitor')) });
+      }, 1500);
     } else if (msg.cmd === 'mic.set') {
       this.state.mic.muted = args.muted === true;
     } else if (msg.cmd === 'windows.launch') {

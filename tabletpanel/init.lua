@@ -15,6 +15,7 @@ local shortcutButtons = require('tabletpanel.shortcut_buttons')
 local pad = require('tabletpanel.pad')
 local Settings = require('tabletpanel.settings')
 local authenticator = require('tabletpanel.authenticator')
+local Monitor = require('tabletpanel.monitor')
 
 local M = {}
 
@@ -24,6 +25,9 @@ M.config = {
   -- The tablet's clock, in PHP date() letters (H, G, h, g, i, A, a; d, j, D, m, n, M, Y, y).
   timeFormat = 'H:i',  -- e.g. 'g:i A' for 9:05 AM
   dateFormat = nil,    -- e.g. 'd.m.Y' or 'D, M j'; nil = the tablet's language decides
+  -- An external monitor's input switch over DDC/CI (needs `brew install m1ddc`), e.g.
+  -- { name = 'Odyssey', inputs = { { label = 'Mac', code = 17 }, { label = 'PC', code = 18 } } }
+  monitor = nil,
 }
 
 local DIR = debug.getinfo(1, 'S').source:match('^@(.*/)')
@@ -32,7 +36,7 @@ local log = hs.logger.new('tabletpanel', 'info')
 function M.start(overrides)
   for k, v in pairs(overrides or {}) do M.config[k] = v end
 
-  M.modules = { windows, spotify, display, badges, mic, system, shortcutButtons, pad, authenticator, Settings.new(M.config) }
+  M.modules = { windows, spotify, display, badges, mic, system, shortcutButtons, pad, authenticator, Settings.new(M.config), Monitor.new(M.config) }
   local server
   local hub = Hub.new({
     send = function(message) server:send(message) end,

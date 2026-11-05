@@ -11,6 +11,7 @@ import { initSleep } from './sleep.js';
 import { initMusic } from './music.js';
 import { initRibbons } from './ribbons.js';
 import { initMic } from './mic.js';
+import { initMonitor } from './monitor.js';
 import { initStatus } from './status.js';
 import { initShortcuts } from './shortcuts.js';
 import { initMap } from './map.js';
@@ -27,7 +28,7 @@ const ctx = {
   MOCK: params.has('mock'),
   mockVariant: params.get('mock'),
   $: (id) => document.getElementById(id),
-  store: { windows: null, spotify: null, display: null, badges: null, mic: null, system: null, shortcuts: null, settings: null, authenticator: null, spotifyAt: 0 },
+  store: { windows: null, spotify: null, display: null, badges: null, mic: null, monitor: null, system: null, shortcuts: null, settings: null, authenticator: null, spotifyAt: 0 },
   connected: false,
   on(event, fn) { (listeners[event] = listeners[event] || []).push(fn); },
   emit(event) { (listeners[event] || []).forEach((fn) => fn()); },
@@ -42,6 +43,7 @@ ctx.sleep = initSleep(ctx);
 ctx.ribbons = initRibbons(ctx);
 initMusic(ctx);
 ctx.mic = initMic(ctx);
+initMonitor(ctx);
 initStatus(ctx);
 initShortcuts(ctx);
 ctx.map = initMap(ctx);

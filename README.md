@@ -95,8 +95,17 @@ Options go in the `start({ ... })` table in `~/.hammerspoon/init.lua`. Reload Ha
 | `port` | `8765` | The server's port. The tablet app assumes 8765 unless you type the full address. |
 | `timeFormat` | `'H:i'` | The clock, in [PHP `date()`](https://www.php.net/manual/en/datetime.format.php) letters: `H` `G` `h` `g` `i` `A` `a`. For example `'g:i A'` → 9:05 AM. |
 | `dateFormat` | the tablet's language | The date, in the same letters: `d` `j` `D` `m` `n` `M` `Y` `y`. For example `'d.m.Y'` → 14.10.2026, `'D, M j'` → Wed, Oct 14. A backslash keeps the next character as it is. |
+| `monitor` | off | An input switch for an external monitor, beside the clock: `{ name = 'Odyssey', inputs = { { label = 'Mac', code = 17 }, { label = 'PC', code = 18 } } }`. See [Monitor input](#monitor-input). |
 
 The shortcut buttons are configured per app in [`tabletpanel/shortcuts.lua`](tabletpanel/shortcuts.lua).
+
+### Monitor input
+
+The panel can switch an external monitor between its inputs over DDC/CI, the control channel in the video cable. It needs [m1ddc](https://github.com/waydabber/m1ddc) on an Apple Silicon Mac: `brew install m1ddc`.
+
+- `name` is part of the monitor's name as macOS shows it (`m1ddc display list` prints them).
+- `code` is the monitor's DDC input value. Common ones: HDMI 1 `17`, HDMI 2 `18`, DisplayPort 1 `15`, DisplayPort 2 `16`, USB-C `27`. To check one, read the current input with `m1ddc display list` and `m1ddc display <n> get input`.
+- The switch shows only while that monitor is connected. Not every monitor or Mac port supports DDC; some built-in HDMI ports don't.
 
 ## Tablet app
 
