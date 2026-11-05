@@ -18,7 +18,7 @@ local AGENT_TIMEOUT_SECONDS = 3
 local TOOL_PATHS = { '/opt/homebrew/bin/m1ddc', '/usr/local/bin/m1ddc' }
 local KEYCHAIN_SERVICE = 'mac-panel.pc-agent'
 local VENV_PYTHON = os.getenv('HOME') .. '/.local/share/mac-panel/venv/bin/python'
-local REPO = debug.getinfo(1, 'S').source:match('^@(.*/)tabletpanel/') or './'
+local SOURCE = debug.getinfo(1, 'S').source:match('^@(.*)$')
 local KINDS = { 'keyboard', 'mouse' } -- in the order notes name them
 
 -- `m1ddc display list` lines look like "[2] Odyssey G95NC (A9A90B46-…)".
@@ -102,7 +102,9 @@ local defaultDeps = {
       if timer then timer:stop() end
       cb(code, out)
     end, { '-m', 'hidpp.logi', table.unpack(args) })
-    task:setWorkingDirectory(REPO)
+    -- The repo folder, for `-m hidpp.logi`. ~/.hammerspoon/tabletpanel is usually a symlink to it.
+    local real = hs.fs.pathToAbsolute(SOURCE) or SOURCE
+    task:setWorkingDirectory(real:match('^(.*/)tabletpanel/') or './')
     if not task:start() then return cb(-1, '') end
     timer = hs.timer.doAfter(15, function()
       if task:isRunning() then task:terminate() end
@@ -127,10 +129,14 @@ local defaultDeps = {
   end,
   postAgent = function(channels, key, cb, url)
     local reply = once(cb)
+    local timer -- referenced from the callback below, so it isn't garbage-collected before it fires
     hs.http.asyncPost(url, json.encode({ channels = channels }),
       { Authorization = 'Bearer ' .. key, ['Content-Type'] = 'application/json' },
-      function(status, body) reply(status, body) end)
-    hs.timer.doAfter(AGENT_TIMEOUT_SECONDS, function() reply(0, '') end) -- the PC is off or asleep
+      function(status, body)
+        if timer then timer:stop() end
+        reply(status, body)
+      end)
+    timer = hs.timer.doAfter(AGENT_TIMEOUT_SECONDS, function() reply(0, '') end) -- the PC is off or asleep
   end,
   every = function(seconds, fn) return hs.timer.doEvery(seconds, fn) end,
   after = function(seconds, fn) return hs.timer.doAfter(seconds, fn) end,
@@ -194,6 +200,7 @@ function Monitor.new(config, deps)
       for kind in pairs(missing) do wanted[kind] = channels[kind] end
       local url = string.format('http://%s:%d/devices/host', pc.address, math.tointeger(pc.port) or 8766)
       deps.postAgent(wanted, key, function(status, body)
+        log.i('monitor: PC agent answered ' .. tostring(status) .. ' ' .. tostring(body))
         local result = status == 200 and (decodeObject(body) or {}).result or {}
         local still = {}
         local any = false
@@ -217,6 +224,7 @@ function Monitor.new(config, deps)
         if channels[kind] then args[#args + 1] = kind .. '=' .. channels[kind] end
       end
       deps.runLogi(args, function(code, out)
+        log.i('monitor: logi ' .. table.concat(args, ' ') .. ' -> ' .. tostring(code) .. ' ' .. tostring(out))
         local result = code == 0 and decodeObject(out) or {}
         local missing, any = {}, false
         for kind in pairs(channels) do

@@ -18,6 +18,7 @@ ROOT, DEVICE_NAME, CHANGE_HOST = 0x0000, 0x0005, 0x1814
 KINDS = {0: 'keyboard', 3: 'mouse', 4: 'mouse', 5: 'mouse'}  # HID++ device types: keyboard, mouse, trackpad, trackball
 TRIES = 3  # a sleeping keyboard can miss the first request or two
 TIMEOUT = 1.0
+SETTLE = 0.4  # time for a device to leave after setCurrentHost, before checking it did
 
 
 def request(device, feature, function, params=b''):
@@ -81,7 +82,8 @@ def list_devices(receiver):
 
 
 def set_host(receivers, channels):
-    """Send each device of a kind in `channels` to that channel. Returns {kind: sent | already | not_here}."""
+    """Send each device of a kind in `channels` to that channel.
+    Returns {kind: sent | already | not_here | failed}; failed = it stayed here after every try."""
     result = {kind: 'not_here' for kind in channels}
     for receiver in receivers:
         for d in _devices(receiver):
@@ -91,9 +93,20 @@ def set_host(receivers, channels):
             if d['channel'] == target:
                 result[d['kind']] = 'already' if result[d['kind']] != 'sent' else 'sent'
             else:
-                receiver.send(d['index'], d['feature'], 1, bytes([target - 1]))  # no reply: the device leaves
-                result[d['kind']] = 'sent'
+                result[d['kind']] = 'sent' if _switch(receiver, d, target) else 'failed'
     return result
+
+
+def _switch(receiver, d, target):
+    """setCurrentHost gets no reply (the device leaves), and a dozing device can miss it: check that
+    it left, and send again if it's still here on its old channel."""
+    for _ in range(TRIES):
+        receiver.send(d['index'], d['feature'], 1, bytes([target - 1]))
+        time.sleep(SETTLE)
+        hosts = receiver.ask(d['index'], d['feature'], 0)
+        if hosts is None or hosts[1] == target - 1:
+            return True
+    return False
 
 
 def parse_assignments(args):

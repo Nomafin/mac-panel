@@ -2,6 +2,8 @@ import unittest
 
 from hidpp import logi
 
+logi.SETTLE = 0  # no waiting in tests
+
 CHANGE_HOST, DEVICE_NAME = 0x1814, 0x0005
 
 
@@ -40,8 +42,12 @@ class FakeReceiver:
         if feature == 9 and function == 0:
             return bytes([d['channels'], d['channel'] - 1, 0])
         if feature == 9 and function == 1:
+            if d.get('ignore_switch', 0) > 0:  # a dozing keyboard can miss it
+                d['ignore_switch'] -= 1
+                return None
             d['channel'] = params[0] + 1
-            return None  # the device leaves: no reply
+            del self.devices[device]  # it left this receiver
+            return None
         return None
 
 
@@ -93,6 +99,15 @@ class LogiTest(unittest.TestCase):
         self.assertEqual(logi.set_host([r], {'keyboard': 2}), {'keyboard': 'sent'})
         never = FakeReceiver({2: keyboard(channel=1, silent=99)})
         self.assertEqual(logi.set_host([never], {'keyboard': 2}), {'keyboard': 'not_here'})
+
+    def test_a_missed_switch_is_sent_again(self):
+        r = FakeReceiver({2: keyboard(channel=1, ignore_switch=1)})
+        self.assertEqual(logi.set_host([r], {'keyboard': 2}), {'keyboard': 'sent'})
+        self.assertEqual(sum(1 for d, f, fn, _ in r.sent if f == 9 and fn == 1), 2)
+
+    def test_a_device_that_never_leaves_has_failed(self):
+        r = FakeReceiver({2: keyboard(channel=1, ignore_switch=99)})
+        self.assertEqual(logi.set_host([r], {'keyboard': 2}), {'keyboard': 'failed'})
 
     def test_parse_assignments(self):
         self.assertEqual(logi.parse_assignments(['mouse=1', 'keyboard=2']), {'mouse': 1, 'keyboard': 2})
