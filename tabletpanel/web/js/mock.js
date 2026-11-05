@@ -1,4 +1,4 @@
-// Mock mode (?mock, ?mock=idle, ?mock=nospotify): fake Mac state for working on the page in a
+// Mock mode (?mock, ?mock=idle, ?mock=nospotify, ?mock=pcdown): fake Mac state for working on the page in a
 // desktop browser. MockSocket answers like the Mac does.
 
 export function mockArt(h1, h2) {
@@ -74,6 +74,7 @@ export function mockIcon(bundleId) {
 export class MockSocket {
   constructor(variant) {
     this.readyState = 0;
+    this.variant = variant;
     this.state = mockState(variant);
     this.v = 1;
     this.trackIndex = 0;
@@ -124,6 +125,8 @@ export class MockSocket {
       if (!mon.inputs.some((i) => i.code === args.code)) Object.assign(reply, { ok: false, error: 'unknown_input' });
       else setTimeout(() => {
         mon.current = args.code;
+        // ?mock=pcdown: the keyboard and mouse don't follow.
+        if (this.variant === 'pcdown') mon.switch = { seq: ((mon.switch && mon.switch.seq) || 0) + 1, ok: false, note: 'Keyboard and mouse: press 1 and 2' };
         this.v += 1;
         if (this.onmessage) this.onmessage({ data: JSON.stringify(this.stateMsg('monitor')) });
       }, 1500);

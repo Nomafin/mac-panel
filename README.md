@@ -107,6 +107,27 @@ The panel can switch an external monitor between its inputs over DDC/CI, the con
 - `code` is the monitor's DDC input value. Common ones: HDMI 1 `17`, HDMI 2 `18`, DisplayPort 1 `15`, DisplayPort 2 `16`, USB-C `27`. To check one, read the current input with `m1ddc display list` and `m1ddc display <n> get input`.
 - The switch shows only while that monitor is connected. Not every monitor or Mac port supports DDC; some built-in HDMI ports don't.
 
+### Keyboard and mouse
+
+With Logitech Easy-Switch devices (the 1-2-3 channel buttons), the keyboard and mouse can follow the monitor switch, so no USB switch box is needed. Each computer gets its own Unifying or Bolt receiver, paired on its own channel of each device.
+
+1. **Pair:** plug a second receiver straight into the other computer and pair each device on a free channel with Logitech's software there. Note which channel each device uses on which computer.
+2. **The Mac's tool:** `./hidpp/setup-mac.sh` makes a Python venv with `hidapi` in `~/.local/share/mac-panel/venv`. Check with `~/.local/share/mac-panel/venv/bin/python -m hidpp.logi list` (run in the repo folder): it lists the devices and their current channels.
+3. **Channels per input:** add `devices` to each input in the `monitor` option, with the channel each device uses for that computer:
+   ```lua
+   monitor = { name = 'Odyssey', inputs = {
+     { label = 'Mac', code = 17, devices = { keyboard = 1, mouse = 2 } },
+     { label = 'PC', code = 18, devices = { keyboard = 2, mouse = 1 } },
+   } },
+   pc = { address = '192.168.1.58', port = 8766 },
+   ```
+4. **The PC agent** (Windows), for the way back. Once the devices are on the PC, only the PC's receiver can reach them, so a small helper there sends them back when the Mac asks.
+   - Make a key on the Mac and keep it in the Keychain: `security add-generic-password -s mac-panel.pc-agent -a key -w "$(openssl rand -hex 32)"`.
+   - Copy `hidpp\` and `pc-agent\` to a folder on the PC (it needs Python 3.11 or newer), and in an administrator PowerShell there run `powershell -ExecutionPolicy Bypass -File pc-agent\install.ps1 -Key <the key> -Allow <the Mac's IP>`. `security find-generic-password -s mac-panel.pc-agent -w` prints the key.
+   - The installer makes a venv, writes `%APPDATA%\mac-panel-agent\config.json`, starts the agent at logon (Task Scheduler, no window), and opens port 8766 to the Mac only, on private networks only. The agent logs to `agent.log` in the same folder.
+
+A tap sends the devices the Mac can reach, then asks the agent for the rest. If the PC is off or something doesn't follow, the panel says which buttons to press, for example *Keyboard and mouse: press 1 and 2*.
+
 ## Tablet app
 
 ### Build

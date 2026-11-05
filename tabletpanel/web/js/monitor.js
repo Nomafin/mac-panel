@@ -3,6 +3,7 @@
 import { esc, shake } from './util.js';
 
 const CONFIRM_MS = 5000;
+const NOTE_MS = 8000;
 
 // The input to highlight: the one just tapped while it's being switched, else the monitor's.
 export function highlighted(state, pending, now) {
@@ -14,10 +15,19 @@ export function switchFailed(state, pending, now) {
   return !!pending && now >= pending.until && (!state || state.current !== pending.code);
 }
 
+// The note for a keyboard and mouse switch that didn't work, if it's one not shown yet.
+export function noteFor(sw, seenSeq) {
+  return sw && !sw.ok && sw.seq > seenSeq ? sw.note || null : null;
+}
+
 export function initMonitor(ctx) {
   const el = ctx.$('monitor');
+  const noteEl = ctx.$('monitor-note');
   let pending = null;
   let html = '';
+  let seenSeq = null; // switches before the page loaded are old news
+  let noteTimer = 0;
+  let lastCode = null;
 
   function render() {
     const m = ctx.store.monitor;
@@ -34,16 +44,32 @@ export function initMonitor(ctx) {
     }
   }
 
+  function showNote() {
+    const sw = ctx.store.monitor && ctx.store.monitor.switch;
+    if (seenSeq === null) seenSeq = sw ? sw.seq : 0;
+    const note = noteFor(sw, seenSeq);
+    if (sw) seenSeq = Math.max(seenSeq, sw.seq);
+    if (!note) return;
+    noteEl.textContent = note;
+    noteEl.hidden = false;
+    const btn = el.querySelector(`.source[data-code="${lastCode}"]`);
+    if (btn) shake(btn);
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { noteEl.hidden = true; }, NOTE_MS);
+  }
+
   function settle() {
     const m = ctx.store.monitor;
     if (pending && m && m.current === pending.code) pending = null;
     render();
+    showNote();
   }
 
   el.addEventListener('click', (e) => {
     const btn = e.target.closest('.source');
     if (!btn) return;
     const code = Number(btn.dataset.code);
+    lastCode = code;
     const mine = { code, until: Date.now() + CONFIRM_MS };
     pending = mine;
     render();

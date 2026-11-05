@@ -27,7 +27,10 @@ M.config = {
   dateFormat = nil,    -- e.g. 'd.m.Y' or 'D, M j'; nil = the tablet's language decides
   -- An external monitor's input switch over DDC/CI (needs `brew install m1ddc`), e.g.
   -- { name = 'Odyssey', inputs = { { label = 'Mac', code = 17 }, { label = 'PC', code = 18 } } }
+  -- An input can also move Logitech Easy-Switch devices: devices = { keyboard = 1, mouse = 2 }.
   monitor = nil,
+  -- The PC agent (pc-agent/) that sends the devices back from a Windows PC: { address = '192.168.1.58', port = 8766 }
+  pc = nil,
 }
 
 local DIR = debug.getinfo(1, 'S').source:match('^@(.*/)')
