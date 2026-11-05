@@ -39,6 +39,11 @@ def parse_channels(body):
     return channels
 
 
+def load_config(path):
+    with open(path, encoding='utf-8-sig') as f:  # Windows PowerShell 5 writes UTF-8 with a BOM
+        return json.load(f)
+
+
 def make_server(config, actions, host='0.0.0.0'):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, status, payload):
@@ -83,12 +88,15 @@ def main():
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
     log.addHandler(handler)
     log.setLevel(logging.INFO)
-    with open(os.path.join(folder, 'config.json'), encoding='utf-8') as f:
-        config = json.load(f)
     sys.path.insert(0, os.path.dirname(HERE))  # the repo root, for hidpp
     sys.path.insert(0, HERE)
-    from actions import devices
-    server = make_server(config, {'/devices/host': devices.host})
+    try:
+        config = load_config(os.path.join(folder, 'config.json'))
+        from actions import devices
+        server = make_server(config, {'/devices/host': devices.host})
+    except Exception:
+        log.exception('could not start')
+        raise
     log.info('listening on port %s', server.server_address[1])
     server.serve_forever()
 

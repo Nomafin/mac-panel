@@ -79,6 +79,13 @@ class AgentTest(unittest.TestCase):
         self.assertFalse(agent.allowed('10.0.0.2', None, cfg))
         self.assertFalse(agent.allowed('10.0.0.2', 'Bearer ', {'key': '', 'allow': ['10.0.0.2']}))
 
+    def test_load_config_accepts_a_bom(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile('wb', suffix='.json', delete=False) as f:
+            f.write(b'\xef\xbb\xbf{"port": 8766, "key": "k", "allow": ["1.2.3.4"]}')  # Windows PowerShell 5's utf8
+        self.addCleanup(os.remove, f.name)
+        self.assertEqual(agent.load_config(f.name), {'port': 8766, 'key': 'k', 'allow': ['1.2.3.4']})
+
 
 if __name__ == '__main__':
     unittest.main()
