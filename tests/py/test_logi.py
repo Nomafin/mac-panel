@@ -26,7 +26,10 @@ class FakeReceiver:
         self.sent.append((device, feature, function, bytes(params)))
         d = self.devices.get(device)
         if not d:
-            return None
+            return logi.ERROR  # the receiver answers at once: no such device
+        if d.get('late_check', 0) > 0 and feature == 9 and function == 0 and d.get('switch_seen'):
+            d['late_check'] -= 1
+            return None  # slow to answer after a switch command
         if d.get('silent', 0) > 0:
             d['silent'] -= 1
             return None
@@ -42,6 +45,7 @@ class FakeReceiver:
         if feature == 9 and function == 0:
             return bytes([d['channels'], d['channel'] - 1, 0])
         if feature == 9 and function == 1:
+            d['switch_seen'] = True
             if d.get('ignore_switch', 0) > 0:  # a dozing keyboard can miss it
                 d['ignore_switch'] -= 1
                 return None
@@ -108,6 +112,24 @@ class LogiTest(unittest.TestCase):
     def test_a_device_that_never_leaves_has_failed(self):
         r = FakeReceiver({2: keyboard(channel=1, ignore_switch=99)})
         self.assertEqual(logi.set_host([r], {'keyboard': 2}), {'keyboard': 'failed'})
+
+    def test_a_slow_answer_after_a_missed_switch_still_gets_a_resend(self):
+        r = FakeReceiver({2: keyboard(channel=1, ignore_switch=1, late_check=1)})
+        self.assertEqual(logi.set_host([r], {'keyboard': 2}), {'keyboard': 'sent'})
+        self.assertEqual(sum(1 for d, f, fn, _ in r.sent if f == 9 and fn == 1), 2)
+        self.assertEqual(r.devices, {})  # it really left
+
+    def test_an_error_reply_is_not_retried(self):
+        r = FakeReceiver({})
+        self.assertIsNone(logi.call(r, 3, 0, 0, b'\x00\x05'))
+        self.assertEqual(len(r.sent), 1)
+
+    def test_errors_for_other_software_are_not_ours(self):
+        ours = bytes([0x10, 2, 0x8F, 9, 0x0A, 9, 0])
+        theirs = bytes([0x10, 2, 0x8F, 9, 0x01, 9, 0])  # another app's software id
+        self.assertTrue(logi.is_error(ours, 2))
+        self.assertFalse(logi.is_error(theirs, 2))
+        self.assertFalse(logi.is_error(ours, 1))
 
     def test_parse_assignments(self):
         self.assertEqual(logi.parse_assignments(['mouse=1', 'keyboard=2']), {'mouse': 1, 'keyboard': 2})

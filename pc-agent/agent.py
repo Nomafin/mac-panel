@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 
@@ -45,7 +46,11 @@ def load_config(path):
 
 
 def make_server(config, actions, host='0.0.0.0'):
+    lock = threading.Lock()  # one action at a time: two would read each other's receiver replies
+
     class Handler(BaseHTTPRequestHandler):
+        timeout = 10  # a client that stalls doesn't hold a thread forever
+
         def reply(self, status, payload):
             body = json.dumps(payload).encode()
             self.send_response(status)
@@ -61,14 +66,18 @@ def make_server(config, actions, host='0.0.0.0'):
             action = actions.get(self.path)
             if not action:
                 return self.reply(404, {'error': 'not_found'})
-            length = int(self.headers.get('Content-Length') or 0)
-            if length > MAX_BODY:
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+            except ValueError:
+                length = -1
+            if not 0 <= length <= MAX_BODY:
                 return self.reply(400, {'error': 'bad_request'})
             channels = parse_channels(self.rfile.read(length))
             if channels is None:
                 return self.reply(400, {'error': 'bad_request'})
             try:
-                result = action(channels)
+                with lock:
+                    result = action(channels)
             except Exception:
                 log.exception('%s failed', self.path)
                 return self.reply(500, {'error': 'failed'})

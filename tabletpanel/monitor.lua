@@ -14,7 +14,7 @@ local Monitor = {}
 local POLL_SECONDS = 4
 local READ_BACK_SECONDS = 2 -- a monitor takes a moment to report the input it switched to
 local TIMEOUT_SECONDS = 10
-local AGENT_TIMEOUT_SECONDS = 3
+local AGENT_TIMEOUT_SECONDS = 10 -- a PC that is off fails at once; a dozing keyboard can take a few seconds
 local TOOL_PATHS = { '/opt/homebrew/bin/m1ddc', '/usr/local/bin/m1ddc' }
 local KEYCHAIN_SERVICE = 'mac-panel.pc-agent'
 local VENV_PYTHON = os.getenv('HOME') .. '/.local/share/mac-panel/venv/bin/python'
@@ -190,12 +190,12 @@ function Monitor.new(config, deps)
     notify()
   end
 
-  -- Ask the PC agent for the devices the Mac couldn't send.
-  local function viaAgent(missing, channels)
+  -- Ask the PC agent for the devices the Mac couldn't send. finish(ok, note) reports and ends the job.
+  local function viaAgent(missing, channels, finish)
     local pc = config.pc
-    if type(pc) ~= 'table' or type(pc.address) ~= 'string' then return report(false, Monitor.note(missing, channels)) end
+    if type(pc) ~= 'table' or type(pc.address) ~= 'string' then return finish(false, Monitor.note(missing, channels)) end
     deps.agentKey(function(key)
-      if not key then return report(false, Monitor.note(missing, channels, 'no PC agent key in the Keychain')) end
+      if not key then return finish(false, Monitor.note(missing, channels, 'no PC agent key in the Keychain')) end
       local wanted = {}
       for kind in pairs(missing) do wanted[kind] = channels[kind] end
       local url = string.format('http://%s:%d/devices/host', pc.address, math.tointeger(pc.port) or 8766)
@@ -209,16 +209,23 @@ function Monitor.new(config, deps)
         end
         if any then
           log.w('monitor: devices not switched (agent status ' .. tostring(status) .. ')')
-          return report(false, Monitor.note(still, channels))
+          return finish(false, Monitor.note(still, channels))
         end
-        report(true)
+        finish(true)
       end, url)
     end)
   end
 
-  -- Send the devices to an input's channels: locally first, then the agent for the rest.
-  local function switchDevices(channels)
+  -- Send the devices to an input's channels: locally first, then the agent for the rest. The job
+  -- holds the queue until it reports, so the next tap starts after this one has finished.
+  -- tap.monitorOk: whether this tap's monitor switch worked (set by the job before this one).
+  local function switchDevices(channels, tap)
     enqueueJob(function(done)
+      local function finish(ok, note)
+        report(ok, note)
+        done()
+      end
+      if not tap.monitorOk then return finish(false, "The monitor didn't switch, so the keyboard and mouse stayed") end
       local args = { 'set-host' }
       for _, kind in ipairs(KINDS) do
         if channels[kind] then args[#args + 1] = kind .. '=' .. channels[kind] end
@@ -230,8 +237,7 @@ function Monitor.new(config, deps)
         for kind in pairs(channels) do
           if result[kind] ~= 'sent' and result[kind] ~= 'already' then missing[kind], any = true, true end
         end
-        if any then viaAgent(missing, channels) else report(true) end
-        done()
+        if any then viaAgent(missing, channels, finish) else finish(true) end
       end)
     end)
   end
@@ -292,11 +298,13 @@ function Monitor.new(config, deps)
       if i.code == args.code then code = i.code end
     end
     if not code then return false, 'unknown_input' end
+    local tap = {}
     enqueue({ 'display', uuid, 'set', 'input', tostring(code) }, function(exit)
+      tap.monitorOk = exit == 0
       if exit ~= 0 then log.w('monitor: switching to input ' .. code .. ' failed') end
       deps.after(READ_BACK_SECONDS, readInput)
     end)
-    if devicesFor[code] then switchDevices(devicesFor[code]) end
+    if devicesFor[code] then switchDevices(devicesFor[code], tap) end
     return true
   end
 

@@ -264,6 +264,27 @@ return function(T)
     T.eq(mod.state().switch, { seq = 2, ok = true })
   end)
 
+  T.test('a tap waits for the previous tap\'s PC agent answer', function()
+    local mod, env = tap(17)
+    env.finish(0, '{"keyboard": "not_here", "mouse": "not_here"}')
+    mod.actions.set({ code = 18 }) -- while the agent is still answering
+    local runs = #env.runs
+    T.eq(#env.pending, 0) -- the second tap's monitor switch hasn't started
+    env.agentCb(200, '{"result": {"keyboard": "sent", "mouse": "sent"}}')
+    T.eq(mod.state().switch, { seq = 1, ok = true })
+    T.eq(#env.runs, runs + 1)
+    T.eq(env.runs[#env.runs], 'display ' .. UUID .. ' set input 18')
+  end)
+
+  T.test('a failed monitor switch leaves the keyboard and mouse where they are', function()
+    local mod, env = setup({ config = { name = 'Odyssey', inputs = DEVICE_INPUTS } })
+    connect(mod, env)
+    mod.actions.set({ code = 18 })
+    env.finish(1, '')
+    T.eq(#env.logi, 0)
+    T.eq(mod.state().switch, { seq = 1, ok = false, note = "The monitor didn't switch, so the keyboard and mouse stayed" })
+  end)
+
   T.test('device channels stay out of the state the page gets', function()
     local mod, env = setup({ config = { name = 'Odyssey', inputs = DEVICE_INPUTS } })
     connect(mod, env)

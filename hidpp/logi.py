@@ -19,6 +19,7 @@ KINDS = {0: 'keyboard', 3: 'mouse', 4: 'mouse', 5: 'mouse'}  # HID++ device type
 TRIES = 3  # a sleeping keyboard can miss the first request or two
 TIMEOUT = 1.0
 SETTLE = 0.4  # time for a device to leave after setCurrentHost, before checking it did
+ERROR = object()  # Receiver.ask's answer when the receiver says no (no such device, or it left)
 
 
 def request(device, feature, function, params=b''):
@@ -27,8 +28,10 @@ def request(device, feature, function, params=b''):
 
 
 def is_error(data, device):
-    """An error reply for this device (HID++ 1.0 0x8F or HID++ 2.0 0xFF)."""
-    return len(data) >= 3 and data[0] in (SHORT, LONG) and data[1] == device and data[2] in (0x8F, 0xFF)
+    """An error reply to one of our requests for this device (HID++ 1.0 0x8F or 2.0 0xFF). The error
+    echoes the request's function | software id, so errors for other apps (Logi Options) aren't ours."""
+    return (len(data) >= 5 and data[0] in (SHORT, LONG) and data[1] == device and data[2] in (0x8F, 0xFF)
+            and data[4] & 0x0F == SW_ID)
 
 
 def parse_reply(data, device, feature, function):
@@ -41,8 +44,11 @@ def parse_reply(data, device, feature, function):
 
 
 def call(receiver, device, feature, function, params=b''):
+    """ask, again after a silence (a dozing device); an error answer is final."""
     for _ in range(TRIES):
         reply = receiver.ask(device, feature, function, params)
+        if reply is ERROR:
+            return None
         if reply is not None:
             return reply
     return None
@@ -103,9 +109,15 @@ def _switch(receiver, d, target):
     for _ in range(TRIES):
         receiver.send(d['index'], d['feature'], 1, bytes([target - 1]))
         time.sleep(SETTLE)
-        hosts = receiver.ask(d['index'], d['feature'], 0)
+        hosts = None
+        for _ in range(TRIES):  # a slow answer still shows whether it stayed
+            hosts = receiver.ask(d['index'], d['feature'], 0)
+            if hosts is ERROR:
+                return True  # the receiver says it's gone
+            if hosts is not None:
+                break
         if hosts is None or hosts[1] == target - 1:
-            return True
+            return True  # silent all along: gone too
     return False
 
 
@@ -153,7 +165,7 @@ class Receiver:
                 if not data:
                     continue
                 if is_error(data, device):
-                    return None
+                    return ERROR
                 reply = parse_reply(data, device, feature, function)
                 if reply is not None:
                     return reply

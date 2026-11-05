@@ -123,8 +123,10 @@ With Logitech Easy-Switch devices (the 1-2-3 channel buttons), the keyboard and 
    ```
 4. **The PC agent** (Windows), for the way back. Once the devices are on the PC, only the PC's receiver can reach them, so a small helper there sends them back when the Mac asks.
    - Make a key on the Mac and keep it in the Keychain: `security add-generic-password -s mac-panel.pc-agent -a key -w "$(openssl rand -hex 32)"`.
-   - Copy `hidpp\` and `pc-agent\` to a folder on the PC (it needs Python 3.11 or newer), and in an administrator PowerShell there run `powershell -ExecutionPolicy Bypass -File pc-agent\install.ps1 -Key <the key> -Allow <the Mac's IP>`. `security find-generic-password -s mac-panel.pc-agent -w` prints the key.
+   - Copy `hidpp\` and `pc-agent\` to a folder on the PC (it needs Python 3.11 or newer), and in an administrator PowerShell there run `powershell -ExecutionPolicy Bypass -File pc-agent\install.ps1 -Allow <the Mac's IP>`. It asks for the key, so the key stays out of the PowerShell history: `security find-generic-password -s mac-panel.pc-agent -w` prints it on the Mac.
    - The installer makes a venv, writes `%APPDATA%\mac-panel-agent\config.json`, starts the agent at logon (Task Scheduler, no window), and opens port 8766 to the Mac only, on private networks only. The agent logs to `agent.log` in the same folder.
+   - The agent knows the Mac by its IP address, so give the Mac a fixed one (a DHCP reservation, as for the panel). The PC's network must be marked *Private* in Windows' network settings, or the firewall keeps the port closed. Either problem looks like the PC being off; `agent.log` shows refused requests.
+   - Hammerspoon needs macOS's *Local Network* permission (System Settings → Privacy & Security → Local Network) to reach the PC.
 
 A tap sends the devices the Mac can reach, then asks the agent for the rest. If the PC is off or something doesn't follow, the panel says which buttons to press, for example *Keyboard and mouse: press 1 and 2*.
 

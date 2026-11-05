@@ -79,6 +79,34 @@ class AgentTest(unittest.TestCase):
         self.assertFalse(agent.allowed('10.0.0.2', None, cfg))
         self.assertFalse(agent.allowed('10.0.0.2', 'Bearer ', {'key': '', 'allow': ['10.0.0.2']}))
 
+    def test_requests_run_one_at_a_time(self):
+        import time
+        active, peak = [0], [0]
+
+        def slow(channels):
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+            time.sleep(0.2)
+            active[0] -= 1
+            return {}
+        self.server = agent.make_server({'port': 0, 'key': KEY, 'allow': ['127.0.0.1']}, {'/devices/host': slow}, host='127.0.0.1')
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        threads = [threading.Thread(target=self.post, args=({'channels': {'mouse': 1}},)) for _ in range(3)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        self.assertEqual(peak[0], 1)
+
+    def test_bad_content_length_400(self):
+        import socket
+        self.start()
+        for length in ('abc', '-1'):
+            with socket.create_connection(('127.0.0.1', self.server.server_address[1]), timeout=3) as s:
+                s.sendall(('POST /devices/host HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ' + KEY +
+                           '\r\nContent-Length: ' + length + '\r\n\r\n').encode())
+                self.assertIn(b' 400 ', s.recv(200), length)
+
     def test_load_config_accepts_a_bom(self):
         import tempfile
         with tempfile.NamedTemporaryFile('wb', suffix='.json', delete=False) as f:
