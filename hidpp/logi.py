@@ -3,6 +3,7 @@ Unifying or Bolt receiver, and send them to another channel (HID++ 2.0 CHANGE_HO
 
     python -m hidpp.logi list
     python -m hidpp.logi set-host mouse=1 keyboard=2
+    python -m hidpp.logi pair [seconds]   (Unifying: then hold a device's channel button until it blinks fast)
 
 Both print JSON. Channels are 1-based, like the numbers on the devices. Needs `pip install hidapi`.
 """
@@ -121,6 +122,45 @@ def _switch(receiver, d, target):
     return False
 
 
+UNIFYING = 0xC52B
+PAIRING_ERRORS = {1: 'timeout', 2: 'not_supported', 3: 'too_many_devices', 6: 'timeout'}
+
+
+def pairing_request(open_lock, seconds=0):
+    """HID++ 1.0 set register 0xB2 on the receiver (0xFF): open or close its pairing lock, any slot."""
+    return bytes([SHORT, 0xFF, 0x80, 0xB2, 0x01 if open_lock else 0x02, 0x00, seconds])
+
+
+def pairing_event(data):
+    """('open' | 'closed', error) for the receiver's lock notification, ('connected', index) for a device."""
+    if len(data) < 5 or data[0] != SHORT:
+        return None
+    if data[1] == 0xFF and data[2] == 0x4A:
+        return ('open' if data[3] & 0x01 else 'closed', data[4])
+    if data[2] == 0x41 and 1 <= data[1] <= 6:
+        return ('connected', data[1])
+    return None
+
+
+def pair_outcome(events):
+    """What a pairing window ended with, from the receiver's raw notifications."""
+    index, opened = None, False
+    for data in events:
+        event = pairing_event(data)
+        if not event:
+            continue
+        kind, value = event
+        if kind == 'open':
+            opened = True
+        elif kind == 'connected' and opened:
+            index = value
+        elif kind == 'closed' and opened:
+            if value == 0:
+                return {'paired': True, 'index': index}
+            return {'paired': False, 'error': PAIRING_ERRORS.get(value, f'error_{value}')}
+    return {'paired': False, 'error': 'no_answer'}
+
+
 def parse_assignments(args):
     """['mouse=1', 'keyboard=2'] -> {'mouse': 1, 'keyboard': 2}; ValueError for anything else."""
     out = {}
@@ -136,8 +176,9 @@ class Receiver:
     """One receiver's HID++ interface. macOS gives one handle for the whole receiver (a second open
     fails); Windows has one per report size, and long replies arrive only on the long one."""
 
-    def __init__(self, paths):
+    def __init__(self, paths, product=None):
         import hid
+        self.product = product
         self.handles = []
         for path in paths:
             h = hid.device()
@@ -172,6 +213,25 @@ class Receiver:
             time.sleep(0.005)
         return None
 
+    def pair(self, seconds=60):
+        """Open the pairing lock and wait for it to close: a device paired, or the time ran out."""
+        events, opened = [], False
+        self.handles[0].write(pairing_request(True, seconds))
+        end = time.monotonic() + seconds + 5
+        while time.monotonic() < end:
+            for h in self.handles:
+                data = bytes(h.read(64))
+                if not data:
+                    continue
+                events.append(data)
+                event = pairing_event(data)
+                opened = opened or (event is not None and event[0] == 'open')
+                if opened and event and event[0] == 'closed':
+                    return pair_outcome(events)
+            time.sleep(0.01)
+        self.handles[0].write(pairing_request(False))
+        return pair_outcome(events)
+
     def close(self):
         for h in self.handles:
             h.close()
@@ -182,18 +242,19 @@ def open_receivers():
     by_receiver = {}
     for d in hid.enumerate(LOGITECH):
         if d['product_id'] in RECEIVERS and d['usage_page'] == 0xFF00 and d['usage'] in (1, 2):
-            by_receiver.setdefault(d.get('serial_number') or d['product_id'], []).append((d['usage'], d['path']))
+            key = (d['product_id'], d.get('serial_number') or '')
+            by_receiver.setdefault(key, []).append((d['usage'], d['path']))
     receivers = []
-    for paths in by_receiver.values():
+    for (product, _), paths in by_receiver.items():
         try:
-            receivers.append(Receiver([p for _, p in sorted(paths)]))  # short (usage 1) first: requests go there
+            receivers.append(Receiver([p for _, p in sorted(paths)], product))  # short (usage 1) first: requests go there
         except OSError:
             pass
     return receivers
 
 
 def main(argv):
-    if not argv or argv[0] not in ('list', 'set-host'):
+    if not argv or argv[0] not in ('list', 'set-host', 'pair'):
         print(__doc__, file=sys.stderr)
         return 2
     try:
@@ -203,7 +264,11 @@ def main(argv):
         return 2
     receivers = open_receivers()
     try:
-        if argv[0] == 'list':
+        if argv[0] == 'pair':
+            unifying = [r for r in receivers if r.product == UNIFYING]
+            seconds = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 60
+            out = unifying[0].pair(min(seconds, 180)) if unifying else {'paired': False, 'error': 'no_unifying_receiver'}
+        elif argv[0] == 'list':
             out = [d for r in receivers for d in list_devices(r)]
         else:
             out = set_host(receivers, channels)

@@ -131,6 +131,27 @@ class LogiTest(unittest.TestCase):
         self.assertFalse(logi.is_error(theirs, 2))
         self.assertFalse(logi.is_error(ours, 1))
 
+    def test_pairing_lock_request(self):
+        # HID++ 1.0 set register 0xB2 on the receiver itself (0xFF): open, any slot, timeout in seconds
+        self.assertEqual(logi.pairing_request(True, 60), bytes([0x10, 0xFF, 0x80, 0xB2, 0x01, 0x00, 60]))
+        self.assertEqual(logi.pairing_request(False), bytes([0x10, 0xFF, 0x80, 0xB2, 0x02, 0x00, 0x00]))
+
+    def test_pairing_events(self):
+        self.assertEqual(logi.pairing_event(bytes([0x10, 0x03, 0x41, 0x04, 0x02, 0x59, 0x40])), ('connected', 3))
+        self.assertEqual(logi.pairing_event(bytes([0x10, 0xFF, 0x4A, 0x01, 0x00, 0, 0])), ('open', 0))
+        self.assertEqual(logi.pairing_event(bytes([0x10, 0xFF, 0x4A, 0x00, 0x00, 0, 0])), ('closed', 0))
+        self.assertEqual(logi.pairing_event(bytes([0x10, 0xFF, 0x4A, 0x00, 0x01, 0, 0])), ('closed', 1))
+        self.assertIsNone(logi.pairing_event(bytes([0x11, 0x01, 0x09, 0x0A] + [0] * 16)))
+        self.assertIsNone(logi.pairing_event(b''))
+
+    def test_pair_reports_the_new_device(self):
+        events = [bytes([0x10, 0xFF, 0x4A, 0x01, 0, 0, 0]), bytes([0x10, 0x02, 0x41, 0x04, 0x01, 0x5B, 0x40]),
+                  bytes([0x10, 0xFF, 0x4A, 0x00, 0, 0, 0])]
+        self.assertEqual(logi.pair_outcome(events), {'paired': True, 'index': 2})
+        timed_out = [bytes([0x10, 0xFF, 0x4A, 0x01, 0, 0, 0]), bytes([0x10, 0xFF, 0x4A, 0x00, 0x01, 0, 0])]
+        self.assertEqual(logi.pair_outcome(timed_out), {'paired': False, 'error': 'timeout'})
+        self.assertEqual(logi.pair_outcome([]), {'paired': False, 'error': 'no_answer'})
+
     def test_parse_assignments(self):
         self.assertEqual(logi.parse_assignments(['mouse=1', 'keyboard=2']), {'mouse': 1, 'keyboard': 2})
         for bad in (['mouse'], ['mouse=x'], ['mouse=0'], ['mouse=4'], ['trackpad=1']):

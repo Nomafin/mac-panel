@@ -112,6 +112,7 @@ The panel can switch an external monitor between its inputs over DDC/CI, the con
 With Logitech Easy-Switch devices (the 1-2-3 channel buttons), the keyboard and mouse can follow the monitor switch, so no USB switch box is needed. Each computer gets its own Unifying or Bolt receiver, paired on its own channel of each device.
 
 1. **Pair:** plug a second receiver straight into the other computer and pair each device on a free channel with Logitech's software there. Note which channel each device uses on which computer.
+   If Logitech's software won't pair a device with a Unifying receiver, `python -m hidpp.logi pair 180` (on that computer, in the venv) opens the receiver's pairing window for 3 minutes. Select the channel on the device, then switch the device off and on: holding the channel button only makes it look for Bluetooth. On Windows, remove the device from the Bluetooth list first if it was ever paired over Bluetooth.
 2. **The Mac's tool:** `./hidpp/setup-mac.sh` makes a Python venv with `hidapi` in `~/.local/share/mac-panel/venv`. Check with `~/.local/share/mac-panel/venv/bin/python -m hidpp.logi list` (run in the repo folder): it lists the devices and their current channels.
 3. **Channels per input:** add `devices` to each input in the `monitor` option, with the channel each device uses for that computer:
    ```lua
